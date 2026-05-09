@@ -1,0 +1,190 @@
+version: "3.9"
+
+# ── MediDesk AI — Production Docker Compose ───────────────────────────────────
+# Environments: dev / staging / prod
+# Override with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Increase max_connections to 200 (default is 100).
+    # Pool math: 4 workers × (pool_size=5 + max_overflow=5) = 40 max connections.
+    # 200 leaves 160 free for psql, pg_dump, monitoring, future workers.
+    command: >
+      postgres
+        -c max_connections=200
+        -c shared_buffers=256MB
+        -c effective_cache_size=512MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c checkpoint_completion_target=0.9
+        -c wal_buffers=16MB
+        -c log_min_duration_statement=1000
+    environment:
+      POSTGRES_DB:       medidesk
+      POSTGRES_USER:     medidesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # bind to localhost only — not exposed externally
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medidesk -d medidesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save 60 1000 --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+
+  # ── MinIO (S3-compatible object storage) ─────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-03-21T23-13-43Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Flask API (4 eventlet workers) ───────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:    postgresql://medidesk:${POSTGRES_PASSWORD}@db:5432/medidesk
+      REDIS_URL:       redis://redis:6379/0
+      JWT_SECRET:      ${JWT_SECRET:?JWT_SECRET is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_PUBLIC_URL:   http://localhost:9000
+      S3_BUCKET:       ${S3_BUCKET:-medidesk-attachments}
+      S3_ACCESS_KEY:   ${MINIO_ROOT_USER}
+      S3_SECRET_KEY:   ${MINIO_ROOT_PASSWORD}
+      # Per-clinic storage quota in MB (default 500 MB)
+      CLINIC_STORAGE_QUOTA_MB: ${CLINIC_STORAGE_QUOTA_MB:-500}
+      FLASK_ENV:       ${FLASK_ENV:-production}
+      LOG_LEVEL:       ${LOG_LEVEL:-INFO}
+      GUNICORN_WORKERS: 4
+      # Error tracking — set SENTRY_DSN in .env to enable
+      SENTRY_DSN:      ${SENTRY_DSN:-}
+    expose:
+      - "8000"          # internal only — Nginx proxies externally
+    ports:
+      - "127.0.0.1:8000:8000"   # also expose locally for dev/testing
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      replicas: 1       # increase to 2+ for horizontal scaling
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Automated PostgreSQL Backups ─────────────────────────────────────────
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST:     db
+      POSTGRES_USER:     medidesk
+      POSTGRES_DB:       medidesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Optional: upload backups to MinIO
+      MINIO_ENDPOINT:    http://minio:9000
+      MINIO_ACCESS_KEY:  ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:  ${MINIO_ROOT_PASSWORD}
+      BACKUP_BUCKET:     medidesk-backups
+    volumes:
+      - backup_data:/backups   # persistent local backup storage
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Nginx reverse proxy ───────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro   # SSL certs (self-signed for dev, Let's Encrypt for prod)
+      - nginx_logs:/var/log/nginx
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  backup_data:
+  nginx_logs:

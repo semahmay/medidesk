@@ -1,0 +1,170 @@
+.setup-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 20px;
+}
+
+.setup-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.setup-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.setup-header h1 {
+  color: #1D9E75;
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
+.setup-header p {
+  color: #666;
+  font-size: 16px;
+}
+
+.setup-progress {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.step {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 10px;
+  font-weight: 600;
+  color: #666;
+  position: relative;
+}
+
+.step.active {
+  background: #1D9E75;
+  color: white;
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 2px;
+  background: #e0e0e0;
+}
+
+.step.active:not(:last-child)::after {
+  background: #1D9E75;
+}
+
+.setup-step {
+  margin-bottom: 30px;
+}
+
+.setup-step h2 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 22px;
+}
+
+.default-columns,
+.custom-columns-section {
+  margin-bottom: 20px;
+}
+
+.default-columns h3,
+.custom-columns-section h3 {
+  color: #555;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.column-list {
+  margin-bottom: 20px;
+}
+
+.column-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.column-item.default {
+  background: #f8f9fa;
+}
+
+.column-item.custom {
+  background: #e3f2fd;
+}
+
+.column-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.column-type {
+  background: #1D9E75;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.add-column-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.add-column-form .form-input {
+  flex: 1;
+}
+
+.add-column-form .form-select {
+  min-width: 120px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+  border-color: #dc3545;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 30px;
+}
+
+.setup-actions .btn {
+  flex: 1;
+}

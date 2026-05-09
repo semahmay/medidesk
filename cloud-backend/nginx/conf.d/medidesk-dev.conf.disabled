@@ -1,0 +1,68 @@
+# ── MediDesk AI — Nginx dev config (HTTP only, no SSL) ───────────────────────
+# Used when SSL certs are not available (local dev, CI).
+# For production: use medidesk.conf with real TLS certificates.
+# To switch: rename this file to something that doesn't end in .conf,
+#            and rename medidesk.conf.prod to medidesk.conf.
+
+server {
+    listen 80;
+    server_name _;
+
+    # ── Security headers (no HSTS in dev — no SSL) ───────────────────────────
+    add_header X-Content-Type-Options  nosniff always;
+    add_header X-Frame-Options         DENY always;
+    add_header X-XSS-Protection        "1; mode=block" always;
+    add_header Referrer-Policy         "strict-origin-when-cross-origin" always;
+
+    # ── WebSocket (SocketIO) ──────────────────────────────────────────────────
+    location /socket.io/ {
+        proxy_pass         http://medidesk_api;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    # ── Auth endpoints (strict rate limit) ───────────────────────────────────
+    location ~ ^/api/auth {
+        limit_req zone=api_auth burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass         http://medidesk_api;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # ── File upload ───────────────────────────────────────────────────────────
+    location ~ ^/api/v2/attachments/.+$ {
+        limit_req zone=api_upload burst=3 nodelay;
+        client_max_body_size 26M;
+        proxy_pass         http://medidesk_api;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+
+    # ── Health check (no rate limit) ─────────────────────────────────────────
+    location = /api/health {
+        proxy_pass http://medidesk_api;
+        access_log off;
+    }
+
+    # ── General API ───────────────────────────────────────────────────────────
+    location /api/ {
+        limit_req zone=api_general burst=20 nodelay;
+        proxy_pass         http://medidesk_api;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+}
