@@ -11,6 +11,27 @@
 const STORAGE_KEY = 'medidesk_sync_errors';
 const MAX_ERRORS  = 50;
 
+// ── Subscriber pattern ────────────────────────────────────────────────────────
+
+const _subscribers = new Set();
+
+function _notifySubscribers() {
+  _subscribers.forEach(cb => {
+    try { cb(); } catch (e) { console.warn('[syncErrorQueue] subscriber error', e); }
+  });
+}
+
+/**
+ * Subscribe to error queue changes.
+ * Returns an unsubscribe function.
+ */
+export function subscribeSyncErrorChanges(callback) {
+  _subscribers.add(callback);
+  return () => _subscribers.delete(callback);
+}
+
+// ── Storage helpers ───────────────────────────────────────────────────────────
+
 function loadErrors() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -25,7 +46,10 @@ function saveErrors(errors) {
   } catch {
     // localStorage full — skip
   }
+  _notifySubscribers();
 }
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Push a sync error into the registry.
@@ -62,14 +86,39 @@ export async function resolvePatientErrors(globalId, localId) {
 }
 
 /**
- * Get all unresolved errors.
+ * Mark a single error as resolved by id (used by SyncCenter dismiss button).
+ */
+export async function resolveSyncError(id) {
+  const errors = loadErrors();
+  const updated = errors.map(e => e.id === id ? { ...e, resolved: true } : e);
+  saveErrors(updated);
+}
+
+/**
+ * Get ALL errors (resolved + unresolved).
+ * Used by SyncCenter to show the full list.
+ */
+export async function getSyncErrors() {
+  return loadErrors();
+}
+
+/**
+ * Get only unresolved errors.
+ * Used internally and by TopBar badge count.
  */
 export function getUnresolvedErrors() {
   return loadErrors().filter(e => !e.resolved);
 }
 
 /**
- * Clear all errors.
+ * Clear all errors — alias used by SyncCenter "Clear all" button.
+ */
+export async function clearAllSyncErrors() {
+  saveErrors([]);
+}
+
+/**
+ * Clear all errors — original name kept for backward compatibility.
  */
 export function clearAllErrors() {
   saveErrors([]);
