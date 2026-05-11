@@ -6,11 +6,18 @@ import eventlet
 eventlet.monkey_patch()
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── load_dotenv MUST run before any module that reads os.getenv at import time ─
+# database.py reads DATABASE_URL at import time to build the engine.
+# If load_dotenv() runs after the import, DATABASE_URL is not set yet and
+# the engine defaults to SQLite instead of PostgreSQL.
+from dotenv import load_dotenv
+load_dotenv()
+# ─────────────────────────────────────────────────────────────────────────────
+
 from flask import Flask, request, jsonify, g, send_file
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from dotenv import load_dotenv
 from sqlalchemy import or_, case
 from database import init_db, SessionLocal
 from models import Clinic, User, Patient, Message, Appointment, AuditLog, Notification
@@ -32,8 +39,6 @@ import uuid
 import os
 import io
 import requests as http_requests
-
-load_dotenv()
 
 app = Flask(__name__)
 
