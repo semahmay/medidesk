@@ -77,6 +77,11 @@ socketio.init_app(
 # ── Observability ─────────────────────────────────────────────────────────────
 setup_observability(app)
 
+# ── Database initialization — runs at import time (Gunicorn + dev) ────────────
+# Must be called at module level, NOT inside __main__, because Gunicorn imports
+# the app object directly and never executes __main__.
+init_db()
+
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 # Uses Redis when available (SaaS), falls back to in-memory (Electron/dev).
 # Key function: use JWT user_id for authenticated requests (so each user gets
