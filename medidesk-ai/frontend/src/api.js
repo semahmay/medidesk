@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+// Local Flask backend — used by doctor mode for local SQLite reads/writes.
+// Secretary mode never calls this; it uses cloudApi exclusively.
 export const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // Holds the googleId once set — never cleared during a session

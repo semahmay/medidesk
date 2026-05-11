@@ -183,17 +183,10 @@ app.whenReady().then(async () => {
   if (savedUser) {
     currentUser = savedUser;
     console.log(`[auth] Restored session for ${currentUser.email}`);
-    startBackend(currentUser.googleId);
-    waitForBackend((backendReady) => {
-      createAppWindow();
-      loadDashboard(true);
-      if (!backendReady) {
-        // Notify React that the local backend failed to start
-        setTimeout(() => {
-          mainWindow?.webContents.send('backend-start-failed');
-        }, 1000);
-      }
-    });
+    // Production: all data comes from cloud — no local backend needed.
+    // Load dashboard immediately without waiting for a local Flask process.
+    createAppWindow();
+    loadDashboard(true);
   } else {
     // No session — load React app at login size, JoinClinic renders automatically
     createAppWindow();
@@ -232,13 +225,13 @@ ipcMain.handle('start-login', async () => {
     console.log(`[auth] Google login: ${googleUser.email} (${googleUser.googleId})`);
 
     // 2. Exchange Google access token for JWT from cloud backend
-    //    Uses http (not https) — cloud backend runs on plain HTTP locally.
+    //    Uses http — cloud backend runs behind Nginx on port 80 (40.81.230.3).
     //    No fallback — if cloud is offline this throws and we return failure.
     const cloudRes = await new Promise((resolve, reject) => {
       const body = JSON.stringify({ google_token: googleUser.googleAccessToken });
       const req = http.request({
-        hostname: '127.0.0.1',
-        port: 8000,
+        hostname: '40.81.230.3',
+        port: 80,
         path: '/api/auth/google',
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
@@ -268,10 +261,8 @@ ipcMain.handle('start-login', async () => {
     saveClinicSession(clinic_id, 'doctor', googleUser.name);
     // session.json already written by googleAuth.js during OAuth
 
-    // 5. Start local backend for this user
+    // 5. Set currentUser (no local backend needed — all data comes from cloud)
     currentUser = googleUser;
-    await restartBackendForUser(googleUser.googleId);
-    await new Promise(resolve => waitForBackend(resolve));
 
     // 6. Expand window to dashboard size now that login succeeded
     mainWindow?.setResizable(true);
@@ -309,8 +300,8 @@ ipcMain.handle('secretary-login', async (_e, { clinicId, name, password }) => {
     const cloudRes = await new Promise((resolve, reject) => {
       const body = JSON.stringify({ clinic_id: clinicId, name, password });
       const req = http.request({
-        hostname: '127.0.0.1',
-        port: 8000,
+        hostname: '40.81.230.3',
+        port: 80,
         path: '/api/auth/secretary/login',
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },

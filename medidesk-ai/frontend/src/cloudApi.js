@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL || 'http://localhost:8000/api';
+const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL || 'http://40.81.230.3/api';
 
 // ── STEP 2: Single source of tokens — in memory ONLY ─────────────────────────
 // Tokens are loaded here exclusively via setCloudTokens() called from:
@@ -180,7 +180,7 @@ export function connectRealtime() {
     return;
   }
 
-  const WS_BASE = (process.env.REACT_APP_CLOUD_URL || 'http://localhost:8000')
+  const WS_BASE = (process.env.REACT_APP_CLOUD_URL || 'http://40.81.230.3/api')
     .replace('/api', '');
 
   _socket = io(WS_BASE, {
