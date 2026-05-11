@@ -128,7 +128,7 @@ const PatientDetail = ({ selectedPatient, settings, onPatientRefresh }) => {
     }
     api.get('/api/setup').then(r => {
       if (r.data?.settings) setClinicInfo(r.data.settings);
-    }).catch(() => {});
+    }).catch(() => {}); // silently skip if local backend not running
   }, []);
 
   const generatePrescription = async () => {

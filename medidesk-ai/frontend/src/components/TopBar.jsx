@@ -33,7 +33,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
         const s = res.data?.settings;
         if (s) setClinicInfo({ doctor_name: s.doctor_name, clinic_name: s.clinic_name });
       })
-      .catch(() => {});
+      .catch(() => {}); // silently skip — local backend not running in cloud-only mode
 
     const refreshCounts = async () => {
       const [count, errors] = await Promise.all([

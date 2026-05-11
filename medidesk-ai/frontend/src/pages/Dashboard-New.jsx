@@ -169,7 +169,7 @@ const Dashboard = ({ settings, currentUser }) => {
         // where searched patients beyond page 1 were invisible.
         if (debouncedSearch.trim()) {
           const [localSearchRes, cloudSearch] = await Promise.all([
-            fetchWithRetry(() => api.get(`/api/patients/search?q=${encodeURIComponent(debouncedSearch)}`)).catch(err => { console.warn('[ui] patient search failed', err); return null; }),
+            fetchWithRetry(() => api.get(`/api/patients/search?q=${encodeURIComponent(debouncedSearch)}`)).catch(() => null),
             fetchCloudPatients(1, 200, debouncedSearch),
           ]);
           const localResults = localSearchRes?.data?.patients || [];
@@ -214,7 +214,7 @@ const Dashboard = ({ settings, currentUser }) => {
       const response = await api.get('/api/columns');
       setColumns(response.data.columns || []);
     } catch (error) {
-      console.error('Error fetching columns:', error);
+      // Local backend not running — silently skip (cloud-only mode)
     }
   };
 

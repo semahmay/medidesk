@@ -14,11 +14,13 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
   }, []);
 
   const fetchColumns = async () => {
+    // Custom columns live in local SQLite — not available without local backend
+    if (!window.electronAPI && !process.env.REACT_APP_API_URL?.includes('localhost')) return;
     try {
       const response = await api.get('/api/columns');
       setColumns(response.data.columns || []);
     } catch (error) {
-      console.error('Error fetching columns:', error);
+      // Local backend not running — silently skip, columns are a doctor-only feature
     }
   };
 
