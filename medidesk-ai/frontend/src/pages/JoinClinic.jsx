@@ -4,7 +4,7 @@ import { setSession } from '../App';
 import { setCloudTokens } from '../cloudApi';
 import { setUserId } from '../api';
 
-const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL || 'http://localhost:8000/api';
+const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL || 'http://40.81.230.3/api';
 
 /**
  * JoinClinic — onboarding screen shown when no session exists.
