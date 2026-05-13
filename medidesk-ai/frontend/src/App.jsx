@@ -98,7 +98,6 @@ function App() {
   const [loading, setLoading]               = useState(true);
   const [currentUser, setCurrentUser]       = useState(null);
   const [clinicReady, setClinicReady]       = useState(false);
-  const [backendFailed, setBackendFailed]   = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -130,27 +129,14 @@ function App() {
         return;
       }
 
-      // ── Browser / dev mode (no Electron) ──────────────────────────────────
-      // Fall back to localStorage so local dev still works without Electron.
-      const clinicId = localStorage.getItem('clinic_id') || '';
-      if (clinicId) {
-        setSession({
-          clinicId,
-          userRole: localStorage.getItem('user_role') || '',
-          userName: localStorage.getItem('user_name') || '',
-        });
-        setClinicReady(true);
-      }
+      // ── Browser / dev mode (no Electron) — not supported in cloud-only mode
       setLoading(false);
     };
 
     init();
 
-    // Listen for local backend startup failure
-    window.electronAPI?.onBackendStartFailed?.(() => setBackendFailed(true));
-
     // Offline → online toast
-    const handleOnline  = () => {}; // toast fired inside AppInner via useUX
+    const handleOnline  = () => {};
     const handleOffline = () => {};
     window.addEventListener('online',  handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -185,8 +171,6 @@ function App() {
   return (
     <UXProvider>
       <AppInner
-        backendFailed={backendFailed}
-        setBackendFailed={setBackendFailed}
         currentUser={currentUser}
       />
     </UXProvider>
@@ -194,7 +178,7 @@ function App() {
 }
 
 // Inner component so it can use useUX (must be inside UXProvider)
-function AppInner({ backendFailed, setBackendFailed, currentUser }) {
+function AppInner({ currentUser }) {
   const { showToast, conflictData, closeConflict, openConflict, showSyncCenter, setShowSyncCenter } = useUX();
 
   useEffect(() => {
@@ -237,23 +221,6 @@ function AppInner({ backendFailed, setBackendFailed, currentUser }) {
 
   return (
     <ErrorBoundary>
-      {backendFailed && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
-          background: '#fef2f2', borderBottom: '2px solid #fecaca',
-          padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
-          fontSize: 13, color: '#991b1b',
-        }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          Local backend failed to start. Patient data and AI features may be unavailable.
-          <button
-            onClick={() => setBackendFailed(false)}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 700, fontSize: 16 }}
-          >×</button>
-        </div>
-      )}
       <Router>
         <div className="app-container">
           <Routes>
@@ -316,9 +283,8 @@ function AppInner({ backendFailed, setBackendFailed, currentUser }) {
                   try {
                     const p = err.patient;
                     const payload = { ...mergedData, updated_at: new Date().toISOString() };
-                    if (p.id) await (await import('./api')).default.put(`/api/patients/${p.id}`, payload);
                     if (p.global_id) await (await import('./cloudApi')).default.put(`/patients/by-global/${p.global_id}`, { ...payload, force: true });
-                    showToast('✅ Merged version saved.', 'success', 4000);
+                    showToast('Merged version saved.', 'success', 4000);
                   } catch (e) {
                     showToast('Merge failed: ' + (e?.message || ''), 'error', 6000);
                   }

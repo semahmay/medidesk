@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 
 const VoiceRecorder = ({ onTranscriptionComplete, placeholder = "Click to record voice note" }) => {
   const [isRecording, setIsRecording] = useState(false);
@@ -156,7 +156,7 @@ const VoiceRecorder = ({ onTranscriptionComplete, placeholder = "Click to record
       formData.append('file', audioBlob, 'recording.webm');
 
       // Send to backend
-      const response = await api.post('/api/transcribe', formData, {
+      const response = await cloudApi.post('/transcribe', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

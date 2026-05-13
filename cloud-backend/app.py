@@ -9,7 +9,7 @@ eventlet.monkey_patch()
 # ── load_dotenv MUST run before any module that reads os.getenv at import time ─
 # database.py reads DATABASE_URL at import time to build the engine.
 # If load_dotenv() runs after the import, DATABASE_URL is not set yet and
-# the engine defaults to SQLite instead of PostgreSQL.
+# the DATABASE_URL is not set yet and defaults incorrectly.
 from dotenv import load_dotenv
 load_dotenv()
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,19 +46,16 @@ app = Flask(__name__)
 # ALLOWED_ORIGINS must be set explicitly in .env.
 # If missing, defaults to localhost only — never "*" in production.
 #
-# Dev:        ALLOWED_ORIGINS=*
-# Electron:   ALLOWED_ORIGINS=http://localhost:3000,http://localhost
-# Production: ALLOWED_ORIGINS=https://medidesk.app
+# Electron desktop (file://), production domain, dev servers.
+# Example: ALLOWED_ORIGINS=file://,http://localhost:3000,https://medidesk.app
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
 
 if not _raw_origins:
-    # No env var set — safe fallback: localhost only.
-    # This prevents accidental wildcard CORS in production.
-    _allowed_origins = ["http://localhost", "http://localhost:3000", "http://127.0.0.1"]
+    _allowed_origins = ["file://", "http://localhost", "http://localhost:3000", "http://127.0.0.1"]
     import logging as _logging
     _logging.getLogger("cors").warning(
-        "[CORS] ALLOWED_ORIGINS not set — defaulting to localhost only. "
-        "Set ALLOWED_ORIGINS=* for dev or your domain for production."
+        "[CORS] ALLOWED_ORIGINS not set — defaulting to localhost + file://. "
+        "Set ALLOWED_ORIGINS in .env for production."
     )
 elif _raw_origins == "*":
     _allowed_origins = "*"
@@ -1643,11 +1640,8 @@ def health_check():
     """
     from database import DATABASE_URL
     
-    # Determine database type
     if DATABASE_URL.startswith("postgresql"):
         db_type = "postgresql"
-    elif DATABASE_URL.startswith("sqlite"):
-        db_type = "sqlite"
     else:
         db_type = "unknown"
     
@@ -1860,6 +1854,584 @@ def sentry_test():
     raise RuntimeError("Sentry test error — triggered intentionally via /api/internal/sentry-test")
 
 
+# ── Clinic Info ───────────────────────────────────────────────────────────────
+
+@app.route("/api/clinics/me", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def get_my_clinic():
+    """
+    GET /api/clinics/me
+    Returns clinic info for the current user's clinic.
+    Used by TopBar and PatientDetail to display doctor_name and clinic_name.
+    """
+    db = get_db()
+    try:
+        clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
+        if not clinic:
+            return jsonify({"error": "Clinic not found"}), 404
+        doctor = db.query(User).filter_by(clinic_id=g.clinic_id, role="doctor").first()
+        return jsonify({
+            "clinic_id":   clinic.id,
+            "clinic_name": clinic.name,
+            "doctor_name": doctor.name if doctor else "",
+            "doctor_email": doctor.email if doctor else "",
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/clinics/me", methods=["PUT"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("20 per minute")
+def update_my_clinic():
+    """PUT /api/clinics/me — Doctor updates their clinic name."""
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    db = get_db()
+    try:
+        clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
+        if not clinic:
+            return jsonify({"error": "Clinic not found"}), 404
+        clinic.name = name
+        db.commit()
+        return jsonify({"success": True, "clinic_name": clinic.name})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ── AI Chat ───────────────────────────────────────────────────────────────────
+
+@app.route("/api/chat", methods=["POST"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("30 per minute")
+def ai_chat():
+    """
+    POST /api/chat
+    Body: { "message": "...", "patient_context": { ... } }
+    Sends a message to Groq LLM with optional patient context.
+    Requires GROQ_API_KEY in environment.
+    """
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        return jsonify({"error": "AI features are not configured on this server. Set GROQ_API_KEY."}), 503
+
+    data    = request.get_json() or {}
+    message = data.get("message", "").strip()
+    patient = data.get("patient_context") or {}
+
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+
+        if patient:
+            system_prompt = f"""You are a concise medical AI assistant helping a doctor.
+Patient information:
+- Name: {patient.get('full_name', '')}
+- Status: {patient.get('status', '')}
+- Appointment: {patient.get('appointment', '')}
+- Notes: {patient.get('notes', '')}
+
+Rules:
+- Answer ONLY what the doctor asked — nothing more
+- Keep responses to 3-5 sentences maximum
+- Do not add sections the doctor didn't ask for
+- Do not use headers or bullet points unless specifically asked
+- Be direct and clinical
+- You assist the doctor, you do not replace them"""
+        else:
+            system_prompt = (
+                "You are a concise medical AI assistant helping a doctor. "
+                "Be direct and clinical. Keep responses to 3-5 sentences maximum."
+            )
+
+        resp = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=1000,
+            messages=[
+                {"role": "system",  "content": system_prompt},
+                {"role": "user",    "content": "Doctor's Question: " + message},
+            ],
+        )
+        return jsonify({"response": resp.choices[0].message.content})
+
+    except Exception as e:
+        return jsonify({"error": f"AI request failed: {str(e)}"}), 500
+
+
+# ── Medical Reference ─────────────────────────────────────────────────────────
+
+@app.route("/api/medical-reference", methods=["POST"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("30 per minute")
+def medical_reference():
+    """
+    POST /api/medical-reference
+    Body: { "question": "...", "category": "General" }
+    Answers medical reference questions using Groq LLM.
+    """
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        return jsonify({"error": "AI features are not configured on this server. Set GROQ_API_KEY."}), 503
+
+    data     = request.get_json() or {}
+    question = data.get("question", "").strip()
+    category = data.get("category", "General")
+
+    if not question:
+        return jsonify({"error": "question is required"}), 400
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+
+        system_prompt = """You are a professional medical reference assistant for doctors.
+You provide accurate, concise, and clinically relevant medical information.
+
+Rules:
+- Answer only medical and clinical questions
+- Be concise but complete
+- Use bullet points for lists
+- Include dosages, contraindications, and interactions when relevant
+- Always mention when something requires clinical judgment
+- Never give advice to patients — you assist doctors only
+- Respond in the same language the doctor writes in (French or English)"""
+
+        resp = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=1000,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": f"Category: {category}\n\nQuestion: {question}"},
+            ],
+        )
+        return jsonify({"success": True, "answer": resp.choices[0].message.content})
+
+    except Exception as e:
+        return jsonify({"error": f"AI request failed: {str(e)}"}), 500
+
+
+# ── Voice Transcription ───────────────────────────────────────────────────────
+
+@app.route("/api/transcribe", methods=["POST"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("20 per minute")
+def transcribe_audio():
+    """
+    POST /api/transcribe (multipart/form-data, field: "file")
+    Transcribes audio using Groq's Whisper API.
+    Requires GROQ_API_KEY in environment.
+    """
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        return jsonify({"error": "Transcription not configured. Set GROQ_API_KEY."}), 503
+
+    if "file" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    audio_data = file.read()
+    if len(audio_data) > 25 * 1024 * 1024:
+        return jsonify({"error": "Audio file too large (max 25MB)"}), 400
+    if len(audio_data) == 0:
+        return jsonify({"error": "Audio file is empty"}), 400
+
+    filename = secure_filename(file.filename) or "audio.webm"
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+
+        # Groq Whisper API accepts file-like objects
+        transcription = client.audio.transcriptions.create(
+            model="whisper-large-v3-turbo",
+            file=(filename, io.BytesIO(audio_data), file.content_type or "audio/webm"),
+        )
+        return jsonify({"success": True, "text": transcription.text})
+
+    except Exception as e:
+        return jsonify({"error": f"Transcription failed: {str(e)}"}), 500
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/analytics/overview", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_overview():
+    """GET /api/analytics/overview — Summary stats for the clinic."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        now   = datetime.utcnow()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        total_patients = db.query(func.count(Patient.id)).filter(
+            Patient.clinic_id == g.clinic_id, Patient.deleted_at == None
+        ).scalar() or 0
+
+        new_this_month = db.query(func.count(Patient.id)).filter(
+            Patient.clinic_id == g.clinic_id,
+            Patient.deleted_at == None,
+            Patient.created_at >= month_start,
+        ).scalar() or 0
+
+        appts_this_month = db.query(func.count(Appointment.id)).filter(
+            Appointment.clinic_id == g.clinic_id,
+            Appointment.date >= month_start.strftime("%Y-%m-%d"),
+        ).scalar() or 0
+
+        cancelled = db.query(func.count(Appointment.id)).filter(
+            Appointment.clinic_id == g.clinic_id,
+            Appointment.status == "cancelled",
+        ).scalar() or 0
+
+        return jsonify({
+            "total_patients":            total_patients,
+            "new_patients_this_month":   new_this_month,
+            "appointments_this_month":   appts_this_month,
+            "cancelled_appointments":    cancelled,
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/patient-growth", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_patient_growth():
+    """GET /api/analytics/patient-growth — Monthly new patients for last 6 months."""
+    db = get_db()
+    try:
+        from sqlalchemy import func, extract
+        now = datetime.utcnow()
+        result = []
+        for i in range(5, -1, -1):
+            month_date = (now.replace(day=1) - timedelta(days=i * 30)).replace(day=1)
+            next_month = (month_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+            count = db.query(func.count(Patient.id)).filter(
+                Patient.clinic_id == g.clinic_id,
+                Patient.deleted_at == None,
+                Patient.created_at >= month_date,
+                Patient.created_at < next_month,
+            ).scalar() or 0
+            result.append({
+                "month": month_date.strftime("%b %Y"),
+                "count": count,
+            })
+        return jsonify(result)
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/appointments-by-month", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_appointments_by_month():
+    """GET /api/analytics/appointments-by-month — Monthly appointments for last 6 months."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        now = datetime.utcnow()
+        result = []
+        for i in range(5, -1, -1):
+            month_date = (now.replace(day=1) - timedelta(days=i * 30)).replace(day=1)
+            next_month = (month_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+            count = db.query(func.count(Appointment.id)).filter(
+                Appointment.clinic_id == g.clinic_id,
+                Appointment.date >= month_date.strftime("%Y-%m-%d"),
+                Appointment.date < next_month.strftime("%Y-%m-%d"),
+            ).scalar() or 0
+            result.append({
+                "month": month_date.strftime("%b %Y"),
+                "count": count,
+            })
+        return jsonify(result)
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/status-distribution", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_status_distribution():
+    """GET /api/analytics/status-distribution — Patient status breakdown."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        rows = db.query(Patient.status, func.count(Patient.id)).filter(
+            Patient.clinic_id == g.clinic_id,
+            Patient.deleted_at == None,
+        ).group_by(Patient.status).all()
+        return jsonify([{"status": r[0] or "Unknown", "count": r[1]} for r in rows])
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/appointment-status", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_appointment_status():
+    """GET /api/analytics/appointment-status — Appointment status breakdown."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        rows = db.query(Appointment.status, func.count(Appointment.id)).filter(
+            Appointment.clinic_id == g.clinic_id,
+        ).group_by(Appointment.status).all()
+        return jsonify([{"status": r[0] or "Unknown", "count": r[1]} for r in rows])
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/busiest-days", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_busiest_days():
+    """GET /api/analytics/busiest-days — Appointment count by day of week."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        rows = db.query(Appointment.date, func.count(Appointment.id)).filter(
+            Appointment.clinic_id == g.clinic_id,
+        ).group_by(Appointment.date).all()
+
+        day_counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+        day_names  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        for date_str, count in rows:
+            try:
+                d = datetime.strptime(date_str, "%Y-%m-%d")
+                day_counts[d.weekday()] += count
+            except Exception:
+                pass
+        return jsonify([{"day": day_names[i], "count": day_counts[i]} for i in range(7)])
+    finally:
+        db.close()
+
+
+@app.route("/api/analytics/recent-activity", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def analytics_recent_activity():
+    """GET /api/analytics/recent-activity — Last 10 audit log entries."""
+    db = get_db()
+    try:
+        rows = db.query(AuditLog).filter(
+            AuditLog.clinic_id == g.clinic_id,
+        ).order_by(AuditLog.timestamp.desc()).limit(10).all()
+        return jsonify([serialize(r) for r in rows])
+    finally:
+        db.close()
+
+
+# ── Attachments ───────────────────────────────────────────────────────────────
+
+@app.route("/api/patients/<int:patient_id>/attachments", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def list_attachments(patient_id):
+    """GET /api/patients/{id}/attachments — List all attachments for a patient."""
+    db = get_db()
+    try:
+        patient = db.query(Patient).filter_by(id=patient_id, clinic_id=g.clinic_id).first()
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+
+        files = storage.list_files(g.clinic_id)
+        # Filter to files belonging to this patient (prefixed with patient_id)
+        prefix = f"p{patient_id}_"
+        patient_files = [f for f in files if f.startswith(prefix)]
+        attachments = []
+        for fname in patient_files:
+            display_name = fname[len(prefix):]  # strip the patient prefix
+            attachments.append({
+                "id":        fname,   # use filename as stable ID
+                "file_name": display_name,
+                "url":       storage.presigned_url(g.clinic_id, fname),
+                "created_at": None,
+            })
+        return jsonify({"attachments": attachments})
+    finally:
+        db.close()
+
+
+@app.route("/api/patients/<int:patient_id>/attachments", methods=["POST"])
+@verify_jwt
+@limiter.limit("20 per minute")
+def upload_attachment(patient_id):
+    """POST /api/patients/{id}/attachments — Upload a file for a patient."""
+    db = get_db()
+    try:
+        patient = db.query(Patient).filter_by(id=patient_id, clinic_id=g.clinic_id).first()
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+
+        file = request.files["file"]
+        if not file.filename:
+            return jsonify({"error": "No file selected"}), 400
+
+        file_data = file.read()
+        if len(file_data) > MAX_FILE_SIZE:
+            return jsonify({"error": f"File too large (max {MAX_FILE_SIZE // (1024*1024)}MB)"}), 400
+
+        filename = secure_filename(file.filename)
+        # Prefix with patient_id so we can filter by patient later
+        stored_name = f"p{patient_id}_{filename}"
+
+        try:
+            url = storage.save(g.clinic_id, stored_name, io.BytesIO(file_data), file.content_type or "application/octet-stream")
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+        attachment = {
+            "id":        stored_name,
+            "file_name": filename,
+            "url":       url,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        return jsonify({"success": True, "attachment": attachment}), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/attachments/<path:file_id>", methods=["DELETE"])
+@verify_jwt
+@limiter.limit("30 per minute")
+def delete_attachment(file_id):
+    """DELETE /api/attachments/{file_id} — Delete an attachment."""
+    deleted = storage.delete(g.clinic_id, file_id)
+    if not deleted:
+        return jsonify({"error": "File not found"}), 404
+    return jsonify({"success": True})
+
+
+@app.route("/api/attachments/<path:file_id>/open", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def open_attachment(file_id):
+    """GET /api/attachments/{file_id}/open — Download/view an attachment."""
+    data = storage.get(g.clinic_id, file_id)
+    if data is None:
+        return jsonify({"error": "File not found"}), 404
+    # Determine content type from extension
+    ext = file_id.rsplit(".", 1)[-1].lower() if "." in file_id else ""
+    content_types = {
+        "pdf": "application/pdf", "png": "image/png",
+        "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "gif": "image/gif", "webp": "image/webp",
+    }
+    ct = content_types.get(ext, "application/octet-stream")
+    return send_file(io.BytesIO(data), mimetype=ct, as_attachment=False)
+
+
+# ── Custom Columns ────────────────────────────────────────────────────────────
+
+@app.route("/api/columns", methods=["GET"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("60 per minute")
+def get_columns():
+    """GET /api/columns — List custom columns for the clinic."""
+    db = get_db()
+    try:
+        from models import ClinicColumn
+        cols = db.query(ClinicColumn).filter_by(clinic_id=g.clinic_id).order_by(ClinicColumn.created_at).all()
+        # Always include default columns so PatientTable renders correctly
+        defaults = [
+            {"id": "default_full_name",   "column_name": "full_name",   "column_type": "text",   "is_default": True},
+            {"id": "default_phone",       "column_name": "phone",       "column_type": "text",   "is_default": True},
+            {"id": "default_appointment", "column_name": "appointment", "column_type": "text",   "is_default": True},
+            {"id": "default_status",      "column_name": "status",      "column_type": "text",   "is_default": True},
+            {"id": "default_notes",       "column_name": "notes",       "column_type": "text",   "is_default": True},
+        ]
+        custom = [{"id": c.id, "column_name": c.column_name, "column_type": c.column_type, "is_default": False} for c in cols]
+        return jsonify({"columns": defaults + custom})
+    finally:
+        db.close()
+
+
+@app.route("/api/columns", methods=["POST"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("20 per minute")
+def create_column():
+    """POST /api/columns — Add a custom column to the clinic."""
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    col_type = data.get("type", "text").strip()
+
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    if col_type not in ("text", "number", "date", "boolean"):
+        return jsonify({"error": "type must be text, number, date, or boolean"}), 400
+
+    db = get_db()
+    try:
+        from models import ClinicColumn
+        existing = db.query(ClinicColumn).filter_by(clinic_id=g.clinic_id, column_name=name).first()
+        if existing:
+            return jsonify({"error": f"Column '{name}' already exists"}), 409
+
+        col = ClinicColumn(
+            id=str(uuid.uuid4()),
+            clinic_id=g.clinic_id,
+            column_name=name,
+            column_type=col_type,
+        )
+        db.add(col)
+        db.commit()
+        db.refresh(col)
+        return jsonify({"success": True, "column": {"id": col.id, "column_name": col.column_name, "column_type": col.column_type, "is_default": False}}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/columns/<column_id>", methods=["DELETE"])
+@verify_jwt
+@require_role("doctor")
+@limiter.limit("20 per minute")
+def delete_column(column_id):
+    """DELETE /api/columns/{id} — Remove a custom column."""
+    db = get_db()
+    try:
+        from models import ClinicColumn
+        col = db.query(ClinicColumn).filter_by(id=column_id, clinic_id=g.clinic_id).first()
+        if not col:
+            return jsonify({"error": "Column not found"}), 404
+        db.delete(col)
+        db.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 
 # ── Production safety check — runs at module load (Gunicorn + direct) ─────────
@@ -1900,9 +2472,6 @@ if __name__ == "__main__":
             logger.info(f"[DB] Connected to PostgreSQL @ {host_port}")
         else:
             logger.info("[DB] Connected to PostgreSQL")
-    elif DATABASE_URL.startswith("sqlite"):
-        db_path = DATABASE_URL.replace("sqlite:///", "")
-        logger.info(f"[DB] Using SQLite (local mode) @ {db_path}")
     else:
         logger.info(f"[DB] Connected to {DATABASE_URL.split(':')[0]}")
     

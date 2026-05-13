@@ -2,7 +2,6 @@
 import AIChat from './AIChat';
 import NotesEditor from './NotesEditor';
 import VoiceRecorder from './VoiceRecorder';
-import api from '../api';
 import cloudApi from '../cloudApi';
 import { getSession } from '../hooks/useClinicSession';
 import { isDoctor, isSecretary } from '../utils/roleUtils';
@@ -119,16 +118,11 @@ const PatientDetail = ({ selectedPatient, settings, onPatientRefresh }) => {
     }
   }, [selectedPatient]);
 
-  // Load clinic info once — doctor uses local API, secretary uses cloud
+  // Load clinic info once — uses cloud API for both doctor and secretary
   useEffect(() => {
-    if (secretaryMode) {
-      // Secretary has no local backend — clinic info not available via local API
-      // Leave defaults; prescription modal is hidden for secretary anyway
-      return;
-    }
-    api.get('/api/setup').then(r => {
-      if (r.data?.settings) setClinicInfo(r.data.settings);
-    }).catch(() => {}); // silently skip if local backend not running
+    cloudApi.get('/clinics/me').then(r => {
+      if (r.data) setClinicInfo({ doctor_name: r.data.doctor_name, clinic_name: r.data.clinic_name });
+    }).catch(() => {}); // silently skip if not available
   }, []);
 
   const generatePrescription = async () => {
@@ -144,7 +138,7 @@ Patient:
 - Status: ${selectedPatient.status || ''}
 - Notes: ${selectedPatient.notes || 'none'}`;
     try {
-      const res = await api.post('/api/chat', { message: prompt, patient_context: selectedPatient });
+      const res = await cloudApi.post('/chat', { message: prompt, patient_context: selectedPatient });
       const raw = res.data.response || '';
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('No JSON found in response');
@@ -193,31 +187,24 @@ Patient:
   };
 
   const loadAttachments = async () => {
-    // Secretary has no local backend — attachments are local-only for now
-    if (secretaryMode) { setAttachments([]); return; }
+    // Secretary has no local backend — use cloud for both roles
+    if (!selectedPatient?.id) { setAttachments([]); return; }
     try {
-      const res = await api.get('/api/patients/' + selectedPatient.id + '/attachments');
+      const res = await cloudApi.get('/patients/' + selectedPatient.id + '/attachments');
       setAttachments((res.data.attachments || []).filter(a => a && a.file_name));
     } catch(e) { setAttachments([]); }
   };
 
   const loadAppointments = async () => {
-    // Secretary: fetch from cloud using patient name (cloud has no patient_id link yet)
-    if (secretaryMode) {
-      try {
-        const res = await cloudApi.get('/appointments');
-        const all = res.data.appointments || [];
-        setAppointments(all.filter(a =>
-          a.patient_name === selectedPatient.full_name ||
-          (selectedPatient.global_id && a.patient_global_id === selectedPatient.global_id)
-        ));
-      } catch(e) { setAppointments([]); }
-      return;
-    }
+    // Both roles: fetch from cloud using patient name / global_id
     try {
-      const res = await api.get('/api/appointments');
+      const res = await cloudApi.get('/appointments');
       const all = res.data.appointments || [];
-      setAppointments(all.filter(a => a.patient_id === selectedPatient.id || a.patient_name === selectedPatient.full_name));
+      setAppointments(all.filter(a =>
+        a.patient_name === selectedPatient.full_name ||
+        (selectedPatient.global_id && a.patient_global_id === selectedPatient.global_id) ||
+        (selectedPatient.id && a.patient_id === selectedPatient.id)
+      ));
     } catch(e) { setAppointments([]); }
   };
 
@@ -227,37 +214,18 @@ Patient:
       ? selectedPatient.notes + '\n\nVoice: ' + transcription
       : 'Voice: ' + transcription;
     try {
-      if (secretaryMode) {
-        // Secretary: write to cloud with offline queue fallback
-        await secretaryCloudWrite(selectedPatient, { notes: newNotes });
-        if (onPatientRefresh) onPatientRefresh({ ...selectedPatient, notes: newNotes });
-      } else {
-        const res = await api.put('/api/patients/' + selectedPatient.id, { ...selectedPatient, notes: newNotes });
-        if (res.status === 200) {
-          const cloudResult = await updateCloudPatient({ ...selectedPatient, notes: newNotes });
-          if (!cloudResult.ok) {
-            if (cloudResult.conflict) {
-              showToast(`⚠️ Your note update was not saved because another user updated this patient. Reloading latest version.`, 'error', 8000);
-              reportSyncIssue({
-                type: 'conflict',
-                action: 'update',
-                message: `Patient notes conflict for ${selectedPatient.full_name || 'patient'}.`,
-                patientId: selectedPatient.id,
-              });
-              if (onPatientRefresh) onPatientRefresh(selectedPatient);
-              return;
-            }
-            showToast('⚠️ Note saved locally but cloud sync failed. The system will retry automatically.', 'error', 8000);
-            reportSyncIssue({
-              type: 'sync',
-              action: 'update',
-              message: `Cloud sync failed for notes on ${selectedPatient.full_name || 'patient'}.`,
-              patientId: selectedPatient.id,
-            });
-          }
+      // Both roles: write to cloud with offline queue fallback
+      const cloudResult = await updateCloudPatient({ ...selectedPatient, notes: newNotes });
+      if (!cloudResult.ok) {
+        if (cloudResult.conflict) {
+          showToast(`⚠️ Your note update was not saved because another user updated this patient. Reloading latest version.`, 'error', 8000);
+          reportSyncIssue({ type: 'conflict', action: 'update', message: `Patient notes conflict for ${selectedPatient.full_name || 'patient'}.`, patientId: selectedPatient.id });
           if (onPatientRefresh) onPatientRefresh(selectedPatient);
+          return;
         }
+        showToast('⚠️ Note saved but cloud sync failed. Will retry automatically.', 'error', 8000);
       }
+      if (onPatientRefresh) onPatientRefresh({ ...selectedPatient, notes: newNotes });
     } catch(e) { console.error('[PatientDetail] transcription save failed:', e); }
   };
 
@@ -283,7 +251,8 @@ Patient:
       
       const uploadWithRetry = async (retries = 3) => {
          try {
-            return await api.post('/api/patients/' + selectedPatient.id + '/attachments', fd, {
+            return await cloudApi.post('/patients/' + selectedPatient.id + '/attachments', fd, {
+               headers: { 'Content-Type': 'multipart/form-data' },
                onUploadProgress: (e) => {
                  if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
                },
@@ -314,14 +283,15 @@ Patient:
   const handleDeleteAttachment = async (id) => {
     if (!window.confirm('Delete this file?')) return;
     try {
-      const res = await api.delete('/api/attachments/' + id);
-      if (res.data.success) setAttachments(prev => prev.filter(a => a.id !== id));
+      await cloudApi.delete('/attachments/' + id);
+      setAttachments(prev => prev.filter(a => a.id !== id));
     } catch(e) { alert('Error deleting file'); }
   };
 
   const handleDownloadAttachment = (att) => {
-    if (!att?.id) return;
-    const url = api.defaults.baseURL + '/api/attachments/' + att.id + '/open';
+    if (!att?.url && !att?.id) return;
+    // Use presigned URL if available, otherwise fall back to open endpoint
+    const url = att.url || (cloudApi.defaults.baseURL + '/attachments/' + att.id + '/open');
     const win = window.open(url, '_blank');
     if (!win) { const l = document.createElement('a'); l.href = url; l.download = att.file_name; document.body.appendChild(l); l.click(); document.body.removeChild(l); }
   };

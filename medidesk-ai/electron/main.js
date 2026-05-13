@@ -1,14 +1,10 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
-const { spawn } = require('child_process');
 const { startGoogleLogin } = require('./googleAuth');
 const { loadSession, clearSession, loadClinicSession, clearClinicSession } = require('./userStore');
 
 let mainWindow = null;
-let backendProcess = null;
 let currentUser = null;
-let backendStarting = false; // guard against double-start
 
 // ─── Window helpers ───────────────────────────────────────────────────────────
 
@@ -43,132 +39,9 @@ function loadDashboard(withSession = false) {
   }
   mainWindow.center();
 
-  const startUrl = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../frontend/build/index.html')}`;
-
-  // No injection. React calls get-session IPC on mount instead.
-  mainWindow.webContents.once('did-finish-load', () => {
-    if (isDev) mainWindow.webContents.openDevTools();
-  });
+  const startUrl = `file://${path.join(__dirname, '../frontend/build/index.html')}`;
 
   mainWindow.loadURL(startUrl);
-}
-
-// ─── Backend health polling ───────────────────────────────────────────────────
-
-/**
- * Poll /api/health until Flask responds, then call onReady().
- * Gives up after maxAttempts and calls onReady() anyway so the app still opens.
- */
-function waitForBackend(onReady, maxAttempts = 20, intervalMs = 300) {
-  const http = require('http');
-  let attempts = 0;
-
-  const check = () => {
-    attempts++;
-    const req = http.get('http://localhost:5000/api/health', (res) => {
-      if (res.statusCode === 200) {
-        console.log(`[backend] Ready after ${attempts} attempt(s)`);
-        backendStarting = false; // confirmed running — release guard
-        onReady(true);           // true = backend is up
-      } else {
-        retry();
-      }
-    });
-    req.on('error', retry);
-    req.setTimeout(500, () => { req.destroy(); retry(); });
-  };
-
-  const retry = () => {
-    if (attempts >= maxAttempts) {
-      console.warn('[backend] Health check timed out — loading dashboard with warning');
-      backendStarting = false; // release guard even on timeout
-      onReady(false);          // false = backend did not start
-    } else {
-      setTimeout(check, intervalMs);
-    }
-  };
-
-  setTimeout(check, 500); // first check after 500ms
-}
-
-function startBackend(googleId) {
-  // Guard: never start a second process if one is already running or starting
-  if (backendStarting || backendProcess) {
-    console.warn('[backend] startBackend() called but already running/starting — skipped');
-    return;
-  }
-  backendStarting = true;
-
-  const backendPath = app.isPackaged 
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'backend')
-    : path.join(__dirname, '../backend');
-  const python = process.platform === 'win32' ? 'python' : 'python3';
-
-  backendProcess = spawn(python, ['app.py'], {
-    cwd: backendPath,
-    stdio: 'inherit',
-    env: { ...process.env, MEDIDESK_USER_ID: googleId, PYTHONIOENCODING: 'utf-8' },
-  });
-
-  // NOTE: backendStarting is released only after the health check confirms the
-  // server is actually responding (see waitForBackend). This prevents the guard
-  // from being released before the process is ready to accept connections.
-  // The close/error handlers also release it as a safety net.
-
-  backendProcess.on('error', (e) => {
-    console.error('[backend] Failed to start:', e);
-    backendStarting = false;
-  });
-  backendProcess.on('close', (code) => {
-    console.log(`[backend] Exited with code ${code}`);
-    backendProcess = null;
-    backendStarting = false;
-  });
-}
-
-function stopBackend() {
-  if (backendProcess) {
-    backendProcess.kill();
-    backendProcess = null;
-  }
-}
-
-/**
- * Kill old backend, wait for port 5000 to be free, then start new one.
- * On Windows, kill() is async — the process may still hold the port briefly.
- */
-function restartBackendForUser(googleId) {
-  return new Promise((resolve) => {
-    if (!backendProcess) {
-      startBackend(googleId);
-      resolve();
-      return;
-    }
-
-    const oldProcess = backendProcess;
-    backendProcess = null; // clear immediately so startBackend guard passes
-    let started = false;
-
-    oldProcess.once('close', () => {
-      if (started) return; // safety timeout already fired
-      started = true;
-      console.log('[backend] Old process exited, starting new one for', googleId);
-      setTimeout(() => { startBackend(googleId); resolve(); }, 500);
-    });
-
-    oldProcess.kill();
-
-    // Safety timeout — if process doesn't exit in 5s, force start anyway
-    setTimeout(() => {
-      if (started) return; // close handler already fired
-      started = true;
-      console.warn('[backend] Force-starting new backend after timeout');
-      startBackend(googleId);
-      resolve();
-    }, 5000);
-  });
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
@@ -202,10 +75,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') { stopBackend(); app.quit(); }
+  if (process.platform !== 'darwin') { app.quit(); }
 });
 
-app.on('before-quit', stopBackend);
+app.on('before-quit', () => {});
 
 // ─── IPC shared dependencies ──────────────────────────────────────────────────
 // Required here so all IPC handlers below can use them without inline requires.
@@ -455,7 +328,6 @@ ipcMain.handle('logout', async () => {
   clearSession();
   clearClinicSession();
   clearTokens();
-  stopBackend();
 
   // Clear ALL browser storage so no stale data persists for the next user
   try {

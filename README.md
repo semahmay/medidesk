@@ -1,22 +1,21 @@
 # MediDesk AI
 
-AI-powered patient management system for medical clinics with offline-first desktop app and cloud backend.
+AI-powered patient management system for medical clinics with Electron desktop app and cloud SaaS backend.
 
-## 🏗️ Architecture
+## Architecture
 
-- **Desktop App** (`medidesk-ai/`) - Offline-first Electron app for doctors
-- **Cloud Backend** (`cloud-backend/`) - Multi-tenant SaaS API
-- **Frontend** (`medidesk-ai/frontend/`) - React UI
+- **Desktop App** (`medidesk-ai/`) - Electron + React desktop application
+- **Cloud Backend** (`cloud-backend/`) - Multi-tenant Flask API (PostgreSQL + Redis + MinIO)
+- **Deployment** - Docker Compose on Azure VM behind Nginx
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Desktop App (Electron)
 ```bash
 cd medidesk-ai
 npm install
 cd frontend && npm install && cd ..
-cd backend && pip install -r requirements.txt && cd ..
-npm run dev
+npm start
 ```
 
 ### Cloud Backend (Docker)
@@ -27,27 +26,24 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-## 📦 Tech Stack
+## Tech Stack
 
-**Frontend:** React 18, Axios, Socket.IO  
+**Frontend:** React 18, Axios, Socket.IO Client  
 **Backend:** Flask, SQLAlchemy, PostgreSQL, Redis, MinIO  
-**Desktop:** Electron, Node.js  
-**Deployment:** Docker, Nginx, Gunicorn
+**Desktop:** Electron, safeStorage (encrypted tokens)  
+**Deployment:** Docker, Nginx, Gunicorn, Azure VM
 
-## 🔐 Features
+## Features
 
-- JWT authentication with refresh tokens
+- JWT authentication with Google OAuth (doctor) + password (secretary)
 - Role-based access (doctor/secretary)
 - Multi-tenant data isolation
-- Offline-first sync
+- Offline-sync queue with automatic replay
 - Real-time WebSocket updates
-- File storage with MinIO
-- Automated backups
+- MinIO S3-compatible file storage
+- Automated PostgreSQL backups
+- Encrypted token storage (Electron safeStorage)
 
-## 📝 License
+## License
 
 MIT License
-
-## 🤝 Contributing
-
-Private medical software project. Contact maintainer for details.

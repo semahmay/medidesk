@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import api, { fetchWithRetry } from '../api';
 import cloudApi, { onRealtimeEvent } from '../cloudApi';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
@@ -8,7 +7,7 @@ import PatientDetail from '../components/PatientDetail';
 import PatientForm from '../components/PatientForm';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
-import { fetchCloudPatients, mergePatients, replayQueue, loadSyncQueueItems, updateCloudPatient, deleteCloudPatient } from '../services/patientSyncService';
+import { fetchCloudPatients, replayQueue, loadSyncQueueItems, updateCloudPatient, deleteCloudPatient } from '../services/patientSyncService';
 import { loadApptQueueItems } from '../services/appointmentSyncService';
 import { useUX } from '../context/UXContext';
 import '../new-design.css';
@@ -139,63 +138,26 @@ const Dashboard = ({ settings, currentUser }) => {
 
   const fetchPatients = async () => {
     try {
-      if (secretary) {
-        // Secretary: cloud only
-        const cloud = await fetchCloudPatients(page, 50, debouncedSearch);
-        if (cloud === null) {
-          setCloudOffline(true);
-          if (cachedCloudPatients.current.length === 0 && clinicId) {
-            const diskCache = await window.electronAPI?.loadPatientCache?.(clinicId) || [];
-            cachedCloudPatients.current = diskCache;
-          }
-          setPatients(cachedCloudPatients.current);
-        } else {
-          setCloudOffline(false);
-          if (page > 1) {
-            cachedCloudPatients.current = [...cachedCloudPatients.current, ...cloud];
-            setPatients(prev => [...prev, ...cloud]);
-          } else {
-            cachedCloudPatients.current = cloud;
-            setPatients(cloud);
-          }
-          if (clinicId) {
-            window.electronAPI?.savePatientCache?.({ clinicId, patients: cloud });
-          }
+      // Both roles: cloud is the single source of truth
+      const cloud = await fetchCloudPatients(page, 50, debouncedSearch);
+      if (cloud === null) {
+        setCloudOffline(true);
+        if (secretary && cachedCloudPatients.current.length === 0 && clinicId) {
+          const diskCache = await window.electronAPI?.loadPatientCache?.(clinicId) || [];
+          cachedCloudPatients.current = diskCache;
         }
+        setPatients(cachedCloudPatients.current);
       } else {
-        // ── Doctor: server-side search when query present ──
-        // When debouncedSearch is set, call /api/patients/search which searches
-        // ALL patients — not just the current page. This fixes the critical bug
-        // where searched patients beyond page 1 were invisible.
-        if (debouncedSearch.trim()) {
-          const [localSearchRes, cloudSearch] = await Promise.all([
-            fetchWithRetry(() => api.get(`/api/patients/search?q=${encodeURIComponent(debouncedSearch)}`)).catch(() => null),
-            fetchCloudPatients(1, 200, debouncedSearch),
-          ]);
-          const localResults = localSearchRes?.data?.patients || [];
-          if (cloudSearch === null) setCloudOffline(true); else setCloudOffline(false);
-          const { merged, localUpdates } = mergePatients(localResults, cloudSearch || []);
-          setPatients(merged);
-          if (localUpdates.length > 0) {
-            localUpdates.forEach(({ id, fields }) =>
-              api.put(`/api/patients/${id}`, fields).catch(() => {})
-            );
-          }
+        setCloudOffline(false);
+        if (page > 1) {
+          cachedCloudPatients.current = [...cachedCloudPatients.current, ...cloud];
+          setPatients(prev => [...prev, ...cloud]);
         } else {
-          // No search — normal paginated fetch
-          const [localRes, cloud] = await Promise.all([
-            fetchWithRetry(() => api.get(`/api/patients?page=${page}&limit=50`)).catch(() => null),
-            fetchCloudPatients(page, 50, ''),
-          ]);
-          const local = localRes?.data?.patients || [];
-          if (cloud === null) setCloudOffline(true); else setCloudOffline(false);
-          const { merged, localUpdates } = mergePatients(local, cloud || []);
-          setPatients(merged);
-          if (localUpdates.length > 0) {
-            localUpdates.forEach(({ id, fields }) =>
-              api.put(`/api/patients/${id}`, fields).catch(() => {})
-            );
-          }
+          cachedCloudPatients.current = cloud;
+          setPatients(cloud);
+        }
+        if (clinicId) {
+          window.electronAPI?.savePatientCache?.({ clinicId, patients: cloud });
         }
       }
       setFetchError('');
@@ -208,39 +170,19 @@ const Dashboard = ({ settings, currentUser }) => {
   };
 
   const fetchColumns = async () => {
-    // Custom columns are stored in local SQLite — not available for secretary
+    // Custom columns are stored in cloud — skip for secretary (no column management)
     if (secretary) return;
     try {
-      const response = await api.get('/api/columns');
+      const response = await cloudApi.get('/columns');
       setColumns(response.data.columns || []);
     } catch (error) {
-      // Local backend not running — silently skip (cloud-only mode)
+      // Silently skip if not available
     }
   };
 
   const handlePatientSelect = async (patient) => {
-    // ── Secretary: cloud is the only source of truth ──────────────────────
-    // Cloud patients already have all fields from fetchCloudPatients().
-    // Do NOT hit local API (port 5000) — secretary has no local backend.
-    if (secretary) {
-      setSelectedPatient(patient);
-      return;
-    }
-
-    // ── Doctor: prefer local record (has attachments, custom fields) ──────
-    // If the patient is cloud-only (no local record), fall back to cloud data.
-    if (patient._fromCloud && !patient.id) {
-      setSelectedPatient(patient);
-      return;
-    }
-    try {
-      const response = await api.get(`/api/patients/${patient.id}`);
-      setSelectedPatient(response.data.patient);
-    } catch (error) {
-      console.error('Error fetching patient details:', error);
-      // Fallback: use the list data so the panel isn't blank
-      setSelectedPatient(patient);
-    }
+    // Cloud is the only source — use the patient data directly
+    setSelectedPatient(patient);
   };
 
   const handleAddPatient = () => {
@@ -248,104 +190,65 @@ const Dashboard = ({ settings, currentUser }) => {
     setShowPatientForm(true);
   };
 
-  
   const handleUpdatePatient = async (patientId, updates) => {
     try {
-      const patient = patients.find(p => p.id === patientId);
+      const patient = patients.find(p => p.id === patientId || p.global_id === patientId);
       if (!patient) return;
-      if (secretary) {
-        await cloudApi.put(`/patients/${patient.cloud_id || patient.global_id}`, updates);
-      } else {
-        await api.put(`/api/patients/${patientId}`, updates);
-        const cloudResult = await updateCloudPatient({
-          ...patient,
-          ...updates,
-          updated_at: patient.updated_at,
-        });
-        if (!cloudResult.ok) {
-          if (cloudResult.conflict) {
-            // Open the merge modal with both versions
-            const localVersion  = { ...patient, ...updates };
-            const cloudVersion  = cloudResult.cloudVersion || null;
-            showToast(
-              `⚠️ Conflict on ${patient.full_name || 'patient'} — another user changed this record. Click to resolve.`,
-              'error',
-              10000,
-              () => openConflict({
-                local:  localVersion,
-                cloud:  cloudVersion,
-                patientName: patient.full_name,
-                onKeepLocal: async () => {
-                  // Force overwrite: send with no updated_at check
-                  try {
-                    const forcePayload = { ...localVersion, updated_at: new Date().toISOString() };
-                    if (patient.global_id) {
-                      await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...forcePayload, force: true });
-                    } else if (patient.cloud_id) {
-                      await cloudApi.put(`/patients/${patient.cloud_id}`, { ...forcePayload, force: true });
-                    }
-                    showToast('✅ Local version saved to cloud.', 'success', 4000);
-                  } catch (e) {
-                    showToast('Force overwrite failed: ' + (e?.message || 'Unknown error'), 'error', 6000);
-                  }
-                },
-                onAcceptCloud: async () => {
-                  // Pull cloud version into local
-                  if (cloudVersion) {
-                    try {
-                      await api.put(`/api/patients/${patientId}`, cloudVersion);
-                      await fetchPatients();
-                      setSelectedPatient(s => s?.id === patientId ? { ...s, ...cloudVersion } : s);
-                      showToast('✅ Cloud version accepted and saved locally.', 'success', 4000);
-                    } catch (e) {
-                      showToast('Could not apply cloud version: ' + (e?.message || ''), 'error', 6000);
-                    }
+
+      const cloudResult = await updateCloudPatient({ ...patient, ...updates });
+
+      if (!cloudResult.ok) {
+        if (cloudResult.conflict) {
+          const localVersion = { ...patient, ...updates };
+          const cloudVersion = cloudResult.cloudVersion || null;
+          showToast(
+            `⚠️ Conflict on ${patient.full_name || 'patient'} — another user changed this record. Click to resolve.`,
+            'error', 10000,
+            () => openConflict({
+              local: localVersion,
+              cloud: cloudVersion,
+              patientName: patient.full_name,
+              onKeepLocal: async () => {
+                try {
+                  const forcePayload = { ...localVersion, updated_at: new Date().toISOString() };
+                  if (patient.global_id) {
+                    await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...forcePayload, force: true });
                   } else {
-                    showToast('Cloud version unavailable — try reloading.', 'error', 5000);
+                    await cloudApi.put(`/patients/${patient.id}`, { ...forcePayload, force: true });
                   }
-                },
-                onManualMerge: async (mergedData) => {
-                  // Save merged data to local then force push to cloud
-                  try {
-                    const mergePayload = { ...mergedData, updated_at: new Date().toISOString() };
-                    await api.put(`/api/patients/${patientId}`, mergePayload);
-                    if (patient.global_id) {
-                      await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...mergePayload, force: true });
-                    } else if (patient.cloud_id) {
-                      await cloudApi.put(`/patients/${patient.cloud_id}`, { ...mergePayload, force: true });
-                    }
-                    await fetchPatients();
-                    showToast('✅ Merged version saved.', 'success', 4000);
-                  } catch (e) {
-                    showToast('Merge save failed: ' + (e?.message || ''), 'error', 6000);
+                  showToast('✅ Local version saved to cloud.', 'success', 4000);
+                } catch (e) {
+                  showToast('Force overwrite failed: ' + (e?.message || ''), 'error', 6000);
+                }
+              },
+              onAcceptCloud: async () => {
+                await fetchPatients();
+                showToast('✅ Cloud version loaded.', 'success', 4000);
+              },
+              onManualMerge: async (mergedData) => {
+                try {
+                  const mergePayload = { ...mergedData, updated_at: new Date().toISOString() };
+                  if (patient.global_id) {
+                    await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...mergePayload, force: true });
+                  } else {
+                    await cloudApi.put(`/patients/${patient.id}`, { ...mergePayload, force: true });
                   }
-                },
-              })
-            );
-            reportSyncIssue({
-              type: 'conflict', action: 'update',
-              message: `Conflict saving ${patient.full_name || 'patient'}. Click toast to resolve.`,
-              patientId,
-            });
-            // Reload latest to keep local DB consistent with cloud
-            await fetchPatients();
-          } else {
-            // Network / server failure — queued for retry
-            showToast(
-              `⚠️ Update saved locally but cloud sync failed. Click to view in Sync Center.`,
-              'warning',
-              8000,
-              () => setShowSyncCenter(true)
-            );
-            reportSyncIssue({
-              type: 'sync', action: 'update',
-              message: `Cloud sync failed for ${patient.full_name || patientId}.`,
-              patientId,
-            });
-          }
+                  await fetchPatients();
+                  showToast('✅ Merged version saved.', 'success', 4000);
+                } catch (e) {
+                  showToast('Merge save failed: ' + (e?.message || ''), 'error', 6000);
+                }
+              },
+            })
+          );
+          reportSyncIssue({ type: 'conflict', action: 'update', message: `Conflict saving ${patient.full_name || 'patient'}.`, patientId });
+          await fetchPatients();
+        } else {
+          showToast(`⚠️ Update queued — cloud sync failed. Will retry automatically.`, 'warning', 8000, () => setShowSyncCenter(true));
+          reportSyncIssue({ type: 'sync', action: 'update', message: `Cloud sync failed for ${patient.full_name || patientId}.`, patientId });
         }
       }
-      setPatients(prev => prev.map(p => p.id === patientId ? { ...p, ...updates } : p));
+      setPatients(prev => prev.map(p => (p.id === patientId || p.global_id === patientId) ? { ...p, ...updates } : p));
     } catch (e) {
       console.error(e);
       showToast('Failed to update patient. Please try again.', 'error', 6000);
@@ -359,19 +262,16 @@ const Dashboard = ({ settings, currentUser }) => {
 
   const handleDeletePatient = async (patientId) => {
     if (window.confirm('Are you sure you want to delete this patient?')) {
-      const patient = patients.find(p => p.id === patientId);
+      const patient = patients.find(p => p.id === patientId || p.global_id === patientId);
       try {
-        await api.delete(`/api/patients/${patientId}`);
-        // Mirror delete to cloud — queue on failure so it retries
-        if (patient?.cloud_id || patient?.global_id) {
-          await deleteCloudPatient(patient);
-        }
+        await deleteCloudPatient(patient || { id: patientId });
         fetchPatients();
-        if (selectedPatient && selectedPatient.id === patientId) {
+        if (selectedPatient && (selectedPatient.id === patientId || selectedPatient.global_id === patientId)) {
           setSelectedPatient(null);
         }
       } catch (error) {
         console.error('Error deleting patient:', error);
+        showToast('Failed to delete patient.', 'error', 4000);
       }
     }
   };

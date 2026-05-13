@@ -156,3 +156,19 @@ class RevokedToken(Base):
     user_id    = Column(String, nullable=False, index=True)   # JWT sub
     revoked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=False)             # natural token expiry
+
+
+# ── Custom Columns ────────────────────────────────────────────────────────────
+
+class ClinicColumn(Base):
+    """
+    Doctor-defined custom columns for the patient table.
+    Scoped per clinic — each clinic has its own column definitions.
+    """
+    __tablename__ = "clinic_columns"
+
+    id          = Column(String, primary_key=True)
+    clinic_id   = Column(String, ForeignKey("clinics.id"), nullable=False, index=True)
+    column_name = Column(String, nullable=False)
+    column_type = Column(String, nullable=False, default="text")  # text | number | date | boolean
+    created_at  = Column(DateTime, default=datetime.utcnow)

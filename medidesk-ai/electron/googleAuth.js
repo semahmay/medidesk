@@ -3,9 +3,9 @@ const http = require('http');
 const url = require('url');
 const https = require('https');
 const path = require('path');
-const { upsertUser, saveSession } = require('./userStore');
+const { saveSession } = require('./userStore');
 
-require('dotenv').config({ path: path.join(__dirname, '../backend/.env') });
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -18,11 +18,6 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ].join(' ');
 
-/**
- * Full OAuth flow.
- * Opens Google in system browser → catches redirect → exchanges code → saves user.
- * Returns the saved user record { googleId, email, name, picture, ... }.
- */
 function startGoogleLogin() {
   return new Promise((resolve, reject) => {
     if (!CLIENT_ID || !CLIENT_SECRET) {
@@ -47,7 +42,7 @@ function startGoogleLogin() {
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#0f172a;color:#fff">
-        <h2>${error ? '❌ Login cancelled' : '✅ Login successful!'}</h2>
+        <h2>${error ? 'Login cancelled' : 'Login successful!'}</h2>
         <p>You can close this tab and return to MediDesk AI.</p>
       </body></html>`);
 
@@ -59,12 +54,9 @@ function startGoogleLogin() {
         const tokens = await exchangeCodeForTokens(code);
         const googleUser = await fetchUserInfo(tokens.access_token);
 
-        // Save to users.json + write session.json
-        const user = upsertUser(googleUser);
-        saveSession(user.googleId);
+        saveSession({ googleId: googleUser.googleId, email: googleUser.email, name: googleUser.name, picture: googleUser.picture });
 
-        // Attach the Google access token so the frontend can exchange it for a JWT
-        resolve({ ...user, googleAccessToken: tokens.access_token });
+        resolve({ ...googleUser, googleAccessToken: tokens.access_token });
       } catch (err) {
         reject(err);
       }

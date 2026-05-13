@@ -8,10 +8,8 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.6.2",
     "dompurify": "^3.3.3",
-    "jspdf": "^4.2.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-resizable-panels": "^0.0.55",
     "react-router-dom": "^7.13.1",
     "react-scripts": "^5.0.1",
     "recharts": "^2.15.4",
@@ -41,6 +39,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "proxy": "http://localhost:5000"
+  }
 }

@@ -25,9 +25,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePatientCache: (data) => ipcRenderer.invoke('save-patient-cache', data),
   loadPatientCache: (clinicId) => ipcRenderer.invoke('load-patient-cache', clinicId),
 
-  // Backend lifecycle events
-  onBackendStartFailed: (cb) => ipcRenderer.on('backend-start-failed', cb),
-
   // App info + window controls
   getVersion:      () => ipcRenderer.invoke('get-app-version'),
   minimizeWindow:  () => ipcRenderer.invoke('minimize-window'),

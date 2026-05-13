@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import {
@@ -105,13 +105,13 @@ const Analytics = ({ settings, currentUser }) => {
       // Use allSettled so one failing endpoint doesn't kill the whole page
       const [overviewRes, growthRes, appointmentsRes, statusRes, apptStatusRes, busiestRes, activityRes] =
         await Promise.allSettled([
-          api.get('/api/analytics/overview'),
-          api.get('/api/analytics/patient-growth'),
-          api.get('/api/analytics/appointments-by-month'),
-          api.get('/api/analytics/status-distribution'),
-          api.get('/api/analytics/appointment-status'),
-          api.get('/api/analytics/busiest-days'),
-          api.get('/api/analytics/recent-activity'),
+          cloudApi.get('/analytics/overview'),
+          cloudApi.get('/analytics/patient-growth'),
+          cloudApi.get('/analytics/appointments-by-month'),
+          cloudApi.get('/analytics/status-distribution'),
+          cloudApi.get('/analytics/appointment-status'),
+          cloudApi.get('/analytics/busiest-days'),
+          cloudApi.get('/analytics/recent-activity'),
         ]);
 
       const val = (r) => r.status === 'fulfilled' ? r.value.data : null;

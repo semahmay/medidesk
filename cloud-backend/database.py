@@ -1,16 +1,13 @@
 """
 database.py — Database engine configuration.
 
-Supports both SQLite (Electron / dev) and PostgreSQL (SaaS / production).
-Switch by setting DATABASE_URL in .env:
-
-  SQLite (default):    sqlite:///./cloud.db
-  PostgreSQL (SaaS):   postgresql://user:pass@host:5432/dbname
+Production mode: PostgreSQL only.
+SQLite is NOT supported in SaaS deployment.
 
 Connection pool math (PostgreSQL):
   - Gunicorn workers: 4 (set in Dockerfile CMD)
-  - pool_size per worker: 5  → 4 × 5  = 20 steady-state connections
-  - max_overflow per worker: 5  → 4 × 5  = 20 burst connections
+  - pool_size per worker: 5  -> 4 x 5  = 20 steady-state connections
+  - max_overflow per worker: 5  -> 4 x 5  = 20 burst connections
   - Total max: 40 connections
   - PostgreSQL max_connections: 200 (set in docker-compose command)
   - Headroom: 160 connections free for psql, migrations, monitoring
@@ -21,44 +18,34 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool, QueuePool
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./cloud.db")
-_is_sqlite    = DATABASE_URL.startswith("sqlite")
-_is_postgres  = DATABASE_URL.startswith("postgresql")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL or not DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError(
+        "Production requires PostgreSQL. Set DATABASE_URL to a PostgreSQL connection string. "
+        "SQLite is not supported in SaaS mode."
+    )
 
-# Read worker count from env so pool math stays correct if workers change
+_is_postgres = True
+
 _workers = int(os.getenv("GUNICORN_WORKERS", "4"))
 
-if _is_sqlite:
-    # SQLite: single-file, threading workaround required
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        echo=False,
-    )
-elif _is_postgres:
-    # PostgreSQL: pool sized so total connections stay well under max_connections.
-    # Formula: workers × (pool_size + max_overflow) must be < max_connections - 10
-    # With 4 workers, pool_size=5, max_overflow=5: max = 4×10 = 40 (safe under 200)
-    engine = create_engine(
-        DATABASE_URL,
-        poolclass=QueuePool,
-        pool_size=5,           # steady-state connections per worker process
-        max_overflow=5,        # burst connections per worker (short-lived)
-        pool_timeout=30,       # wait up to 30s for a connection before raising
-        pool_pre_ping=True,    # detect stale/dead connections before use
-        pool_recycle=300,      # recycle connections every 5 minutes
-        echo=False,
-    )
-else:
-    # Generic fallback (MySQL, etc.)
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True, echo=False)
+engine = create_engine(
+    DATABASE_URL,
+    poolclass=QueuePool,
+    pool_size=5,
+    max_overflow=5,
+    pool_timeout=30,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    echo=False,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
 def get_db():
-    """Dependency-style session provider — use in route handlers."""
+    """Dependency-style session provider - use in route handlers."""
     db = SessionLocal()
     try:
         yield db
@@ -69,12 +56,11 @@ def get_db():
 def init_db():
     """
     Create all tables and run startup migrations.
-    Safe to call on every startup — only creates missing tables.
+    Safe to call on every startup - only creates missing tables.
     """
-    from models import Clinic, User, Patient, Message, Appointment, AuditLog, Notification, RevokedToken  # noqa: F401
+    from models import Clinic, User, Patient, Message, Appointment, AuditLog, Notification, RevokedToken
     Base.metadata.create_all(bind=engine)
 
-    # ── Backfill global_id for rows that predate Phase 5 ──────────────────
     import uuid as _uuid
     with engine.connect() as conn:
         for table in ("patients", "appointments"):
@@ -90,11 +76,9 @@ def init_db():
                 if rows:
                     conn.commit()
             except Exception:
-                pass  # column may not exist on very old DBs — create_all handles it
+                pass
 
-    # ── PostgreSQL: create indexes if not present ──────────────────────────
-    if _is_postgres:
-        _create_pg_indexes()
+    _create_pg_indexes()
 
 
 def _create_pg_indexes():

@@ -14,7 +14,6 @@
  */
 
 import cloudApi from '../cloudApi';
-import api from '../api';
 import { pushSyncError, resolvePatientErrors } from './syncErrorQueue';
 
 const _syncQueueSubscribers = new Set();
@@ -259,20 +258,7 @@ export async function updateCloudPatient(patient) {
   }
 }
 
-// ── cloud_id write-back with retry ────────────────────────────────────────────
-
-async function writeBackCloudId(localId, cloudId, globalId, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      await api.put(`/api/patients/${localId}`, { cloud_id: cloudId, global_id: globalId });
-      return true;
-    } catch {
-      if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
-    }
-  }
-  console.warn(`[sync] writeBackCloudId: failed after ${retries} attempts for localId=${localId}`);
-  return false;
-}
+// ── cloud_id write-back removed — cloud is now the single source of truth ────
 
 // ── Replay offline queue ──────────────────────────────────────────────────────
 
@@ -330,11 +316,6 @@ export async function replayQueue() {
             global_id:   item.patient.global_id,
           });
           const cloudPatient = res.data.patient;
-          const cloudId = cloudPatient?.id;
-          const cloudGlobalId = cloudPatient?.global_id;
-          if (cloudId && item.patient.id) {
-            writeBackCloudId(item.patient.id, cloudId, cloudGlobalId || item.patient.global_id);
-          }
           await resolvePatientErrors(item.patient.global_id, item.patient.id).catch(err => console.warn('[sync] resolvePatientErrors failed', err));
           replayed++;
           continue;

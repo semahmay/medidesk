@@ -1,29 +1,32 @@
-/**
- * tokenStore.js
- * Persists JWT access + refresh tokens to disk so they survive app restarts.
- * Stored in the same userData folder as users.json / session.json.
- */
-
-const { app } = require('electron');
+const { app, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 function tokenFile() {
-  return path.join(app.getPath('userData'), 'tokens.json');
+  return path.join(app.getPath('userData'), 'tokens.enc');
 }
 
 function saveTokens({ accessToken, refreshToken }) {
-  fs.writeFileSync(
-    tokenFile(),
-    JSON.stringify({ accessToken, refreshToken }, null, 2),
-    'utf8'
-  );
+  const data = JSON.stringify({ accessToken, refreshToken });
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      fs.writeFileSync(tokenFile(), safeStorage.encryptString(data));
+    } else {
+      fs.writeFileSync(tokenFile(), Buffer.from(data, 'utf8'));
+    }
+  } catch (e) {
+    console.error('[tokenStore] save failed:', e.message);
+  }
 }
 
 function loadTokens() {
   try {
     if (fs.existsSync(tokenFile())) {
-      return JSON.parse(fs.readFileSync(tokenFile(), 'utf8'));
+      const buf = fs.readFileSync(tokenFile());
+      if (safeStorage.isEncryptionAvailable()) {
+        return JSON.parse(safeStorage.decryptString(buf));
+      }
+      return JSON.parse(buf.toString('utf8'));
     }
   } catch {}
   return { accessToken: null, refreshToken: null };

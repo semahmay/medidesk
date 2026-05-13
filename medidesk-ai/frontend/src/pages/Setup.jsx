@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import cloudApi from '../cloudApi';
 import '../setup.css';
 
 const Setup = ({ onSetupComplete }) => {
@@ -14,15 +14,15 @@ const Setup = ({ onSetupComplete }) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchColumns();
+    fetchSetup();
   }, []);
 
-  const fetchColumns = async () => {
+  const fetchSetup = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/setup');
+      const response = await cloudApi.get('/setup');
       setColumns(response.data.columns || []);
     } catch (error) {
-      console.error('Error fetching columns:', error);
+      console.error('Error fetching setup:', error);
     }
   };
 
@@ -58,7 +58,7 @@ const Setup = ({ onSetupComplete }) => {
   const handleCompleteSetup = async () => {
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/setup', {
+      const response = await cloudApi.post('/setup', {
         doctor_name: doctorName,
         clinic_name: clinicName,
         language: language,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import '../new-design.css';
@@ -43,7 +43,7 @@ const MedicalReference = ({ settings, currentUser }) => {
     setInputMessage('');
     setLoading(true);
     try {
-      const response = await api.post('/api/medical-reference', { question: message, category: 'General' });
+      const response = await cloudApi.post('/medical-reference', { question: message, category: 'General' });
       setMessages(prev => [...prev, { role: 'assistant', content: response.data.answer }]);
     } catch (error) {
       console.error('Error sending message:', error);

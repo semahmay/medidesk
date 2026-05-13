@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 import NotesEditor from './NotesEditor';
 
 const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSelect, onEditPatient, onDeletePatient, onColumnsChange, fetchPatients }) => {
@@ -14,13 +14,11 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
   }, []);
 
   const fetchColumns = async () => {
-    // Custom columns live in local SQLite — not available without local backend
-    if (!window.electronAPI && !process.env.REACT_APP_API_URL?.includes('localhost')) return;
     try {
-      const response = await api.get('/api/columns');
+      const response = await cloudApi.get('/columns');
       setColumns(response.data.columns || []);
     } catch (error) {
-      // Local backend not running — silently skip, columns are a doctor-only feature
+      // Columns are optional — silently skip
     }
   };
 
@@ -28,9 +26,7 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
     const confirmed = window.confirm('Are you sure you want to delete this column? All data will be lost.');
     if (confirmed) {
       try {
-        console.log('Deleting column:', columnId);
-        await api.delete(`/api/columns/${columnId}`);
-        console.log('Column deleted successfully');
+        await cloudApi.delete(`/columns/${columnId}`);
         fetchColumns();
         if (onColumnsChange) onColumnsChange();
       } catch (error) {
@@ -262,7 +258,7 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
     setLoading(true);
     setError('');
     try {
-      await api.post('/api/columns', {
+      await cloudApi.post('/columns', {
         name: columnName.trim(),
         type: columnType
       });

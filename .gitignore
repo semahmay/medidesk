@@ -1,11 +1,12 @@
-# ── MediDesk AI — Git Ignore ─────────────────────────────────────────────────
-
 # ── Environment & Secrets ─────────────────────────────────────────────────────
 .env
 .env.local
 .env.production
 *.env
 !.env.example
+!.env.saas.example
+medidesk-server_key.pem
+*.pem
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -31,6 +32,9 @@ wheels/
 venv/
 ENV/
 env/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # ── Node.js ───────────────────────────────────────────────────────────────────
 node_modules/
@@ -59,8 +63,8 @@ medidesk-ai/out/
 *.sqlite3
 *.db-journal
 cloud-backend/cloud.db*
-medidesk-ai/data/medidesk.db*
-medidesk-ai/data/users/*/medidesk.db*
+medidesk-ai/data/
+cloud-backend/data/
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 docker-compose.override.yml
@@ -68,7 +72,6 @@ docker-compose.override.yml
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 logs/
-*.log.*
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
@@ -77,31 +80,13 @@ logs/
 *.swo
 *~
 .DS_Store
-
-# ── Backups ───────────────────────────────────────────────────────────────────
-medidesk-ai/_backup_*/
-*.backup
-*.bak
-
-# ── Temporary Files ───────────────────────────────────────────────────────────
-medidesk-ai/backend/temp/
-medidesk-ai/frontend/src/temp/
-*.tmp
-.cache/
-
-# ── User Data (Electron) ──────────────────────────────────────────────────────
-medidesk-ai/data/users/
-medidesk-ai/data/attachments/
-
-# ── SSL Certificates (keep examples, ignore real certs) ──────────────────────
-# Keep self-signed dev certs, ignore production certs
-# cloud-backend/nginx/certs/*.pem (commented - we keep dev certs for now)
-
-# ── Test Coverage ─────────────────────────────────────────────────────────────
-.coverage
-htmlcov/
-.pytest_cache/
-
-# ── OS ────────────────────────────────────────────────────────────────────────
 Thumbs.db
 Desktop.ini
+
+# ── Temp & Cache ──────────────────────────────────────────────────────────────
+*.tmp
+.cache/
+.cert/
+
+# ── GitHub Agents ─────────────────────────────────────────────────────────────
+.github/

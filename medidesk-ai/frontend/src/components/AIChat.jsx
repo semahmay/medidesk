@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import DOMPurify from 'dompurify';
-import api from '../api';
+import cloudApi from '../cloudApi';
 
 const AIChat = ({ patient }) => {
   // Key by global_id (stable across sync) → fall back to local id for legacy records
@@ -58,7 +58,7 @@ const AIChat = ({ patient }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/chat', {
+      const response = await cloudApi.post('/chat', {
         message,
         patient_context: patient,
       });

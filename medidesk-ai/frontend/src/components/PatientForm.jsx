@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 import VoiceRecorder from './VoiceRecorder';
 import ConfirmModal from './ConfirmModal';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
-import { syncPatientToCloud, updateCloudPatient, secretaryCloudWrite } from '../services/patientSyncService';
-import cloudApi from '../cloudApi';
+import { updateCloudPatient } from '../services/patientSyncService';
 
 const PatientForm = ({ patient, onClose, onSave }) => {
   const { clinicId, userRole } = getSession();
@@ -33,12 +32,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     fetchColumns();
     // Load existing patients for duplicate detection (only when adding new)
     if (!patient) {
-      if (secretary) {
-        // Secretary: fetch from cloud
-        cloudApi.get('/patients').then(r => setExistingPatients(r.data.patients || [])).catch(() => {});
-      } else {
-        api.get('/api/patients').then(r => setExistingPatients(r.data.patients || [])).catch(() => {});
-      }
+      cloudApi.get('/patients').then(r => setExistingPatients(r.data.patients || [])).catch(() => {});
     }
   }, []);
 
@@ -66,10 +60,10 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 
   const fetchColumns = async () => {
     try {
-      const response = await api.get('/api/columns');
+      const response = await cloudApi.get('/columns');
       setColumns(response.data.columns || []);
     } catch (error) {
-      console.error('Error fetching columns:', error);
+      // Columns are optional — silently skip if not available
     }
   };
 
@@ -123,96 +117,39 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 
       setSyncStatus('saving');
 
-      if (secretary) {
-        // ── Secretary: cloud write with offline queue fallback ─────────────
-        if (patient) {
-          const { ok, queued, conflict } = await secretaryCloudWrite(patient, {
-            full_name:   submitData.full_name,
-            phone:       submitData.phone       || '',
-            email:       submitData.email       || '',
-            notes:       submitData.notes       || '',
-            appointment: submitData.appointment || '',
-            status:      submitData.status      || 'Active',
-          });
-          if (conflict) {
-            setSyncStatus('');
-            setConflictModal(true);
-            return;
-          }
-          setSyncStatus(ok ? 'synced' : queued ? 'offline' : 'offline');
-        } else {
-          // Create: post directly to cloud (idempotent by global_id)
-          await cloudApi.post('/patients', {
-            full_name:   submitData.full_name,
-            phone:       submitData.phone       || '',
-            email:       submitData.email       || '',
-            notes:       submitData.notes       || '',
-            appointment: submitData.appointment || '',
-            status:      submitData.status      || 'Active',
-          });
+      // ── Both roles: write directly to cloud ──────────────────────────────
+      if (patient) {
+        // Update existing patient
+        const payload = {
+          full_name:   submitData.full_name,
+          phone:       submitData.phone       || '',
+          email:       submitData.email       || '',
+          notes:       submitData.notes       || '',
+          appointment: submitData.appointment || '',
+          status:      submitData.status      || 'Active',
+        };
+        const result = await updateCloudPatient({ ...patient, ...payload });
+        if (result.ok) {
           setSyncStatus('synced');
+        } else if (result.conflict) {
+          setSyncStatus('');
+          setConflictModal(true);
+          return;
+        } else {
+          setSyncStatus('offline');
+          showToast('Patient update queued — will sync when reconnected.', 'warning', 5000);
         }
       } else {
-        // ── Doctor: local first, then cloud sync ──────────────────────────
-        if (patient) {
-          await api.put(`/api/patients/${patient.id}`, submitData);
-          const refreshed = await api.get(`/api/patients/${patient.id}`).catch(() => null);
-          const updatedAt = refreshed?.data?.patient?.updated_at;
-          const result = await updateCloudPatient({
-            ...submitData,
-            cloud_id:   patient.cloud_id,
-            global_id:  patient.global_id,
-            updated_at: updatedAt || patient.updated_at,
-          });
-          if (result.ok) {
-            setSyncStatus('synced');
-          } else {
-            setSyncStatus('offline');
-            if (result.conflict) {
-              setConflictModal(true);
-            } else {
-              showToast('warning', 'Patient update queued. Cloud sync failed.');
-              reportSyncIssue({
-                title: 'Patient update could not sync',
-                message: 'Patient changes were saved locally but failed to reach the cloud.',
-                itemId: patient.id,
-                level: 'warning',
-              });
-            }
-          }
-        } else {
-          const res = await api.post('/api/patients', submitData);
-          const localId = res.data.patient_id;
-          // Fetch the newly created local record to get its global_id and updated_at
-          const localRecord = await api.get(`/api/patients/${localId}`).catch(() => null);
-          const localPatient = localRecord?.data?.patient || {};
-          const syncResult = await syncPatientToCloud({
-            ...submitData,
-            id:         localId,
-            global_id:  localPatient.global_id,
-            updated_at: localPatient.updated_at,
-          });
-          if (syncResult) {
-            // Write both cloud_id and global_id back to local record (with retry in service)
-            await api.put(`/api/patients/${localId}`, {
-              cloud_id:  syncResult.cloud_id,
-              global_id: syncResult.global_id || localPatient.global_id,
-            }).catch(() => {
-              // Non-fatal: will be corrected on next sync
-              console.warn('[PatientForm] cloud_id write-back failed — will retry on next sync');
-            });
-            setSyncStatus('synced');
-          } else {
-            setSyncStatus('offline');
-            showToast('warning', 'Patient creation queued. Cloud sync failed.');
-            reportSyncIssue({
-              title: 'New patient failed to sync',
-              message: 'This patient was saved locally but could not be pushed to the cloud.',
-              itemId: localId,
-              level: 'warning',
-            });
-          }
-        }
+        // Create new patient
+        await cloudApi.post('/patients', {
+          full_name:   submitData.full_name,
+          phone:       submitData.phone       || '',
+          email:       submitData.email       || '',
+          notes:       submitData.notes       || '',
+          appointment: submitData.appointment || '',
+          status:      submitData.status      || 'Active',
+        });
+        setSyncStatus('synced');
       }
 
       setTimeout(() => { setSyncStatus(''); onSave(); }, 600);

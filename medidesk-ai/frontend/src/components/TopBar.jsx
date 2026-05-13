@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import api from '../api';
 import cloudApi, { onRealtimeEvent } from '../cloudApi';
 import ClinicModal from './ClinicModal';
 import { getSession } from '../hooks/useClinicSession';
@@ -28,10 +27,9 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
   const { setShowSyncCenter } = useUX();
 
   useEffect(() => {
-    api.get('/api/setup')
+    cloudApi.get('/clinics/me')
       .then(res => {
-        const s = res.data?.settings;
-        if (s) setClinicInfo({ doctor_name: s.doctor_name, clinic_name: s.clinic_name });
+        if (res.data) setClinicInfo({ doctor_name: res.data.doctor_name, clinic_name: res.data.clinic_name });
       })
       .catch(() => {}); // silently skip — local backend not running in cloud-only mode
 

@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
-import api from '../api';
 import cloudApi from '../cloudApi';
 import { createAppointment, updateAppointment } from '../services/appointmentSyncService';
 
 /**
  * AppointmentModal
- * Works for both doctor (local API) and secretary (cloud API).
- * Props:
- *   onClose, onSave, selectedDate, appointment (null = new), isSecretary
+ * Cloud-only — both doctor and secretary use cloudApi.
  */
 const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecretary }) => {
   const isEdit = Boolean(appointment?.id);
@@ -41,23 +38,18 @@ const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecret
     }
   }, [appointment]);
 
-  // Load patient list for the dropdown
+  // Load patient list for the dropdown (cloud-only)
   useEffect(() => {
     const load = async () => {
       try {
-        if (isSecretary) {
-          const res = await cloudApi.get('/patients');
-          setPatients(res.data.patients || []);
-        } else {
-          const res = await api.get('/api/patients');
-          setPatients(res.data.patients || []);
-        }
+        const res = await cloudApi.get('/patients');
+        setPatients(res.data.patients || []);
       } catch {
         // Non-critical — user can still type patient name manually
       }
     };
     load();
-  }, [isSecretary]);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

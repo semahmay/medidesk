@@ -22,17 +22,10 @@ export const saveSession = ({ clinicId, userRole, userName = '' }) => {
     window.electronAPI.saveClinicSession({ clinicId, userRole, userName });
   }
 
-  // Keep localStorage as fallback for browser dev mode
-  localStorage.setItem('clinic_id', clinicId);
-  localStorage.setItem('user_role', userRole);
-  if (userName) localStorage.setItem('user_name', userName);
 };
 
 export const clearSession = () => {
   setMemorySession({ clinicId: '', userRole: '', userName: '' });
-  localStorage.removeItem('clinic_id');
-  localStorage.removeItem('user_role');
-  localStorage.removeItem('user_name');
 };
 
 // hasSession reads from memory — no localStorage dependency

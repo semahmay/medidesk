@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import api from '../api';
+import cloudApi from '../cloudApi';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
@@ -59,8 +59,7 @@ const NotesEditor = ({ patient, onClose, onSave }) => {
         setTimeout(() => setShowSaved(false), queued ? 3000 : 2000);
         return;
       }
-      // Doctor: local save
-      await api.put(`/api/patients/${patient.id}`, { notes });
+      // Doctor: cloud-only save
       const cloudResult = await updateCloudPatient({ ...patient, notes });
       if (!cloudResult.ok) {
         if (cloudResult.conflict) {
@@ -138,11 +137,6 @@ const NotesEditor = ({ patient, onClose, onSave }) => {
   };
 
   const transcribeAudio = async (audioBlob) => {
-    // Secretary has no local backend — transcription not available
-    if (secretary) {
-      alert('Voice transcription requires the local backend (doctor only).');
-      return;
-    }
     setIsTranscribing(true);
 
     try {
@@ -150,7 +144,7 @@ const NotesEditor = ({ patient, onClose, onSave }) => {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
 
-      const response = await api.post('/api/transcribe', formData, {
+      const response = await cloudApi.post('/transcribe', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000,
       });
