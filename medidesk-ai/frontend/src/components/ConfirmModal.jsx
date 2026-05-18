@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 /**
  * ConfirmModal — replaces window.confirm() everywhere.
  *
@@ -23,6 +25,18 @@ const ConfirmModal = ({
   onConfirm,
   onCancel,
 }) => {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onCancel]);
+
   if (!open) return null;
 
   return (
@@ -48,6 +62,7 @@ const ConfirmModal = ({
 const s = {
   backdrop: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+    backdropFilter: 'blur(4px)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     zIndex: 99998,
   },

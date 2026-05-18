@@ -49,6 +49,13 @@ const Appointments = ({ settings, currentUser }) => {
     reloadAll();
   }, [selectedDate, viewMode, currentUser?.googleId]);
 
+  // Keyboard shortcut for new appointment
+  useEffect(() => {
+    const handleQuickAddAppt = () => setShowModal(true);
+    window.addEventListener('quick-add-appointment', handleQuickAddAppt);
+    return () => window.removeEventListener('quick-add-appointment', handleQuickAddAppt);
+  }, []);
+
   // Replay appointment queue when network comes back
   useEffect(() => {
     const handleOnline = async () => {

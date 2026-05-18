@@ -134,25 +134,46 @@ code {
 .btn-primary {
   background: #1D9E75;
   color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .btn-primary:hover {
-  background: #167a5c;
+  background: #0F6E56;
 }
 
 .btn-secondary {
-  background: #6c757d;
-  color: white;
+  background: transparent;
+  color: #64748b;
+  border: 0.5px solid #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .btn-secondary:hover {
-  background: #545b62;
+  background: #f8fafb;
+  color: #1a202c;
 }
 
 .btn-outline {
   background: transparent;
   color: #1D9E75;
   border: 1px solid #1D9E75;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .btn-outline:hover {

@@ -6,8 +6,17 @@ function dataDir() {
   return app.getPath('userData');
 }
 
-function sessionFile() { return path.join(dataDir(), 'session.enc'); }
-function clinicFile()  { return path.join(dataDir(), 'clinic.enc'); }
+function _cleanLegacy() {
+  ['session.json', 'users.json', 'clinic.json'].forEach(f => {
+    try {
+      const fp = path.join(dataDir(), f);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    } catch {}
+  });
+}
+
+function sessionFile() { _cleanLegacy(); return path.join(dataDir(), 'session.enc'); }
+function clinicFile()  { _cleanLegacy(); return path.join(dataDir(), 'clinic.enc'); }
 
 function _encrypt(data) {
   const str = JSON.stringify(data);
@@ -57,6 +66,7 @@ function loadSession() {
 
 function clearSession() {
   _deleteFile(sessionFile());
+  _cleanLegacy();
 }
 
 function saveClinicSession(clinicId, userRole, userName) {
@@ -69,6 +79,7 @@ function loadClinicSession() {
 
 function clearClinicSession() {
   _deleteFile(clinicFile());
+  _cleanLegacy();
 }
 
 module.exports = { saveSession, loadSession, clearSession, saveClinicSession, loadClinicSession, clearClinicSession };

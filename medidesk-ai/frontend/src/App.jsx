@@ -1,19 +1,24 @@
 import { useState, useEffect, Component } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard-New';
 import Appointments from './pages/Appointments';
 import MedicalReference from './pages/MedicalReference';
 import Analytics from './pages/Analytics';
 import ClinicChat from './pages/ClinicChat';
 import JoinClinic from './pages/JoinClinic';
+import OperationsDashboard from './pages/OperationsDashboard';
 import ConflictMergeModal from './components/ConflictMergeModal';
 import SyncCenter from './components/SyncCenter';
-import { isDoctor } from './utils/roleUtils';
+import { isDoctor, isAdmin } from './utils/roleUtils';
 import { setUserId } from './api';
 import { setCloudTokens, connectRealtime, disconnectRealtime } from './cloudApi';
 import { UXProvider, useUX } from './context/UXContext';
+import { initSentry, setUserContext, captureError } from './errorTracking/sentry';
 import './new-design.css';
 import './modal.css';
+
+// Initialize error tracking
+initSentry();
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
 // Catches any unhandled render error in the component tree.
@@ -31,6 +36,7 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary] Caught error:', error, info?.componentStack);
+    captureError(error, { componentStack: info?.componentStack, location: window.location.hash });
   }
 
   render() {
@@ -98,11 +104,23 @@ function App() {
   const [loading, setLoading]               = useState(true);
   const [currentUser, setCurrentUser]       = useState(null);
   const [clinicReady, setClinicReady]       = useState(false);
+  const [networkStatus, setNetworkStatus]   = useState({ online: true, checking: false });
 
   useEffect(() => {
+    const checkNetwork = async () => {
+      if (window.electronAPI?.checkNetwork) {
+        setNetworkStatus(s => ({ ...s, checking: true }));
+        const result = await window.electronAPI.checkNetwork();
+        setNetworkStatus({ online: result.online, checking: false });
+      }
+    };
+
     const init = async () => {
       // ── Electron path ──────────────────────────────────────────────────────
       if (window.electronAPI?.getSession) {
+        // Check network connectivity on startup
+        await checkNetwork();
+
         // Single IPC call. Reads disk files that are always ready before the
         // window loads. No injection, no events, no timeouts, no race condition.
         const { googleUser, tokens, clinic } = await window.electronAPI.getSession();
@@ -116,6 +134,7 @@ function App() {
         if (googleUser?.googleId) {
           setUserId(googleUser.googleId);
           setCurrentUser(googleUser);
+          setUserContext({ googleId: googleUser.googleId, email: googleUser.email, name: googleUser.name, clinicId: clinic?.clinicId });
         }
 
         // 3. Load clinic session into memory
@@ -135,14 +154,23 @@ function App() {
 
     init();
 
-    // Offline → online toast
-    const handleOnline  = () => {};
-    const handleOffline = () => {};
+    // Offline → online toast with network check
+    const handleOnline = async () => {
+      setNetworkStatus({ online: true, checking: false });
+      await checkNetwork();
+    };
+    const handleOffline = () => setNetworkStatus({ online: false, checking: false });
+
     window.addEventListener('online',  handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // Periodic network check every 30 seconds
+    const networkInterval = setInterval(checkNetwork, 30000);
+
     return () => {
       window.removeEventListener('online',  handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(networkInterval);
     };
   }, []);
 
@@ -161,6 +189,7 @@ function App() {
           if (user?.googleId) {
             setUserId(user.googleId);
             setCurrentUser(user);
+            setUserContext({ googleId: user.googleId, email: user.email, name: user.name });
           }
           setClinicReady(true);
         }}
@@ -180,6 +209,39 @@ function App() {
 // Inner component so it can use useUX (must be inside UXProvider)
 function AppInner({ currentUser }) {
   const { showToast, conflictData, closeConflict, openConflict, showSyncCenter, setShowSyncCenter } = useUX();
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl/Cmd + N = New patient
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('quick-add-patient'));
+      }
+      // Ctrl/Cmd + F = Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('focus-search'));
+      }
+      // Ctrl/Cmd + 1 = Go to patients
+      if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+        e.preventDefault();
+        window.location.hash = '#/';
+      }
+      // Ctrl/Cmd + 2 = Go to appointments
+      if ((e.ctrlKey || e.metaKey) && e.key === '2') {
+        e.preventDefault();
+        window.location.hash = '#/appointments';
+      }
+      // Ctrl/Cmd + Shift + A = New appointment (from anywhere)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('quick-add-appointment'));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const attemptReplay = async () => {
@@ -239,6 +301,12 @@ function AppInner({ currentUser }) {
               path="/analytics"
               element={isDoctor(getSession().userRole)
                 ? <Analytics currentUser={currentUser} />
+                : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/operations"
+              element={isAdmin(getSession().userRole)
+                ? <OperationsDashboard />
                 : <Navigate to="/" replace />}
             />
           </Routes>

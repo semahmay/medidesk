@@ -1,10 +1,70 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session, safeStorage, clipboard } = require('electron');
 const path = require('path');
 const { startGoogleLogin } = require('./googleAuth');
 const { loadSession, clearSession, loadClinicSession, clearClinicSession } = require('./userStore');
 
 let mainWindow = null;
 let currentUser = null;
+
+// Auto-update configuration
+const isDev = !app.isPackaged;
+let autoUpdater = null;
+
+function initAutoUpdater() {
+  if (isDev) {
+    console.log('[updater] Running in development mode - skipping auto-update');
+    return;
+  }
+
+  try {
+    const { autoUpdater: updater } = require('electron-updater');
+    autoUpdater = updater;
+
+    autoUpdater.logger = require('electron-log');
+    autoUpdater.logger.transports.file.level = 'info';
+    autoUpdater.logger.transports.console.level = 'debug';
+
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('checking-for-update', () => {
+      console.log('[updater] Checking for updates...');
+    });
+
+    autoUpdater.on('update-available', (info) => {
+      console.log('[updater] Update available:', info.version);
+      mainWindow?.webContents.send('update-available', info);
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+      console.log('[updater] No updates available');
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      console.log(`[updater] Download progress: ${progress.percent.toFixed(1)}%`);
+      mainWindow?.webContents.send('update-progress', progress);
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('[updater] Update downloaded:', info.version);
+      mainWindow?.webContents.send('update-downloaded', info);
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('[updater] Error:', err.message);
+    });
+
+    // Check for updates after app starts
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.warn('[updater] Check failed:', err.message);
+      });
+    }, 5000);
+
+  } catch (err) {
+    console.warn('[updater] Auto-updater not available:', err.message);
+  }
+}
 
 // ─── Window helpers ───────────────────────────────────────────────────────────
 
@@ -17,9 +77,35 @@ function createAppWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
     show: false,
     title: 'MediDesk AI',
+    backgroundColor: '#0f172a',
+    minWidth: 400,
+    minHeight: 600,
+  });
+
+  // Content Security Policy - strict to prevent XSS
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data: blob: https:",
+          "font-src 'self' data:",
+          "connect-src 'self' http://40.81.230.3 https://40.81.230.3",
+          "frame-ancestors 'none'",
+          "form-action 'self'",
+          "base-uri 'self'",
+        ].join('; '),
+      },
+    });
   });
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
@@ -50,6 +136,17 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
     cb(permission === 'media');
   });
+
+  // Clean up any legacy plaintext cache files from previous versions
+  try {
+    const userData = app.getPath('userData');
+    const files = fs.readdirSync(userData);
+    files.forEach(f => {
+      if (f.startsWith('patient_cache_') && f.endsWith('.json')) {
+        try { fs.unlinkSync(path.join(userData, f)); } catch {}
+      }
+    });
+  } catch {}
 
   const savedUser = loadSession();
 
@@ -129,10 +226,10 @@ ipcMain.handle('start-login', async () => {
     const { access_token, refresh_token, clinic_id } = cloudRes;
     if (!access_token || !clinic_id) throw new Error('incomplete_cloud_response');
 
-    // 4. Save everything to disk atomically
+    // 4. Save everything to disk atomically (encrypted via safeStorage)
     saveTokens({ accessToken: access_token, refreshToken: refresh_token });
     saveClinicSession(clinic_id, 'doctor', googleUser.name);
-    // session.json already written by googleAuth.js during OAuth
+    // Session already persisted by googleAuth.js via saveSession() → session.enc
 
     // 5. Set currentUser (no local backend needed — all data comes from cloud)
     currentUser = googleUser;
@@ -300,13 +397,15 @@ ipcMain.handle('load-sync-queue', () => {
 const fs = require('fs');
 
 function patientCacheFile(clinicId) {
-  return path.join(app.getPath('userData'), `patient_cache_${clinicId}.json`);
+  return path.join(app.getPath('userData'), `patient_cache_${clinicId}.enc`);
 }
 
 ipcMain.handle('save-patient-cache', (_e, { clinicId, patients }) => {
   if (!clinicId) return;
   try {
-    fs.writeFileSync(patientCacheFile(clinicId), JSON.stringify(patients, null, 2), 'utf8');
+    const str = JSON.stringify(patients);
+    const buf = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(str) : Buffer.from(str, 'utf8');
+    fs.writeFileSync(patientCacheFile(clinicId), buf);
   } catch (e) {
     console.warn('[cache] Failed to save patient cache:', e.message);
   }
@@ -316,7 +415,13 @@ ipcMain.handle('load-patient-cache', (_e, clinicId) => {
   if (!clinicId) return [];
   try {
     const file = patientCacheFile(clinicId);
-    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (fs.existsSync(file)) {
+      const buf = fs.readFileSync(file);
+      if (safeStorage.isEncryptionAvailable()) {
+        return JSON.parse(safeStorage.decryptString(buf));
+      }
+      return JSON.parse(buf.toString('utf8'));
+    }
   } catch (e) {
     console.warn('[cache] Failed to load patient cache:', e.message);
   }
@@ -367,3 +472,73 @@ ipcMain.handle('maximize-window', () => {
   mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
 });
 ipcMain.handle('close-window', () => mainWindow?.close());
+
+// ─── IPC: Network status ──────────────────────────────────────────────────────────
+
+ipcMain.handle('check-network', async () => {
+  return new Promise((resolve) => {
+    const req = http.request({
+      hostname: '40.81.230.3',
+      port: 80,
+      path: '/api/health',
+      method: 'GET',
+      timeout: 5000,
+    }, (res) => {
+      resolve({ online: res.statusCode < 400 });
+    });
+    req.on('error', () => resolve({ online: false }));
+    req.on('timeout', () => { req.destroy(); resolve({ online: false }); });
+    req.end();
+  });
+});
+
+// ─── IPC: App info ────────────────────────────────────────────────────────────────
+
+ipcMain.handle('get-build-info', () => {
+  return {
+    version: app.getVersion(),
+    name: app.getName(),
+    platform: process.platform,
+    arch: process.arch,
+  };
+});
+
+// ─── IPC: Clipboard ───────────────────────────────────────────────────────────────
+
+ipcMain.handle('copy-to-clipboard', (_e, text) => {
+  clipboard.writeText(text);
+  return true;
+});
+
+// ─── IPC: Auto-update controls ───────────────────────────────────────────────────
+
+ipcMain.handle('check-for-updates', async () => {
+  if (!autoUpdater) return { available: false, error: 'Auto-updater not available' };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { available: !!result?.updateInfo, info: result?.updateInfo };
+  } catch (err) {
+    return { available: false, error: err.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  if (!autoUpdater) return { error: 'Auto-updater not available' };
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('install-update', () => {
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall(false, true);
+  }
+});
+
+// Initialize auto-updater when app is ready
+app.whenReady().then(() => {
+  initAutoUpdater();
+});

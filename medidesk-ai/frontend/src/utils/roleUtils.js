@@ -5,3 +5,4 @@
 
 export const isDoctor    = (role) => role === 'doctor';
 export const isSecretary = (role) => role === 'secretary';
+export const isAdmin     = (role) => role === 'admin';

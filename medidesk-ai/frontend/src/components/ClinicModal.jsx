@@ -49,11 +49,16 @@ const ClinicModal = ({ onClose, currentUser }) => {
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(clinicId);
+      // Use Electron IPC for clipboard - more reliable in desktop app
+      if (window.electronAPI?.copyToClipboard) {
+        await window.electronAPI.copyToClipboard(clinicId);
+      } else if (navigator.clipboard && window.isSecureContext) {
+        // Fallback to browser API for web mode
+        await navigator.clipboard.writeText(clinicId);
       } else {
+        // Last resort fallback for Electron
         const el = document.createElement('textarea');
         el.value = clinicId;
         el.style.cssText = 'position:fixed;opacity:0';
@@ -66,6 +71,8 @@ const ClinicModal = ({ onClose, currentUser }) => {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Copy failed:', err);
+      // Show error but still let user manually copy
+      alert('Could not copy automatically. Please select the Clinic ID and copy manually:\n\n' + clinicId);
     }
   };
 
@@ -156,12 +163,12 @@ const ClinicModal = ({ onClose, currentUser }) => {
                 </button>
               </div>
               <div style={s.infoRow}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2">
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="12" y1="8" x2="12" y2="12"/>
                   <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                <span style={s.infoText}>Secretary enters this ID in the Join Clinic screen</span>
+                <span style={s.infoText}>Share this ID with your secretary. They enter it in the login screen along with their name.</span>
               </div>
 
               <div style={s.divider} />
@@ -284,7 +291,7 @@ const s = {
     fontSize: 16, color: '#94a3b8', cursor: 'pointer', padding: '4px 6px',
   },
   body:         { padding: '20px' },
-  sectionLabel: { margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  sectionLabel: { margin: '24px 0 8px', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' },
   desc:         { margin: '0 0 20px', fontSize: 14, color: '#475569', lineHeight: 1.6 },
   idBox: {
     display: 'flex', alignItems: 'center', gap: 10,
@@ -296,21 +303,37 @@ const s = {
     letterSpacing: '2px', color: '#166534', fontFamily: 'monospace',
   },
   copyBtn: {
-    padding: '6px 14px', border: 'none', borderRadius: 6,
-    color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'background 0.2s',
+    padding: '8px 16px', border: 'none', borderRadius: 8,
+    color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'background 0.2s, transform 0.1s',
   },
-  infoRow:  { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 },
-  infoText: { fontSize: 12, color: '#94a3b8' },
+  infoRow:  { display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4, marginTop: 8 },
+  infoText: { fontSize: 12, color: '#64748b', lineHeight: 1.4 },
   divider:  { height: 1, background: '#e2e8f0', margin: '20px 0' },
-  staffHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  staffHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 20 },
   addBtn: {
     background: '#1D9E75', color: '#fff', border: 'none',
-    borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    transition: 'background 0.2s, transform 0.1s',
   },
-  addForm: {
-    display: 'flex', flexDirection: 'column', gap: 8,
-    background: '#f8fafb', border: '1px solid #e2e8f0',
-    borderRadius: 10, padding: '14px', marginBottom: 14,
+addForm: {
+    display: 'flex', flexDirection: 'column', gap: 10,
+    background: '#f1f5f9', border: '1px solid #e2e8f0',
+    borderRadius: 12, padding: '16px', marginBottom: 14,
+    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
+  },
+  addInput: {
+    height: 40, border: '1px solid #cbd5e1', borderRadius: 8,
+    padding: '0 12px', fontSize: 14, outline: 'none', background: '#fff',
+    transition: 'all 0.2s ease',
+  },
+  addError: {
+    fontSize: 12, color: '#dc2626', background: '#fef2f2',
+    border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px',
+  },
+  addSubmitBtn: {
+    height: 40, background: '#1D9E75', color: '#fff',
+    border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+    marginTop: 4, transition: 'background 0.2s, transform 0.1s',
   },
   addInput: {
     height: 36, border: '1px solid #e2e8f0', borderRadius: 6,

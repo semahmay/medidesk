@@ -42,6 +42,17 @@ import requests as http_requests
 
 app = Flask(__name__)
 
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    return response
+
 # ── CORS — strictly ENV-based, no wildcard default ───────────────────────────
 # ALLOWED_ORIGINS must be set explicitly in .env.
 # If missing, defaults to localhost only — never "*" in production.
@@ -670,10 +681,10 @@ def get_patients():
         else:
             offset = 0
 
-        query = db.query(Patient).filter(Patient.clinic_id == g.clinic_id, Patient.deleted_at == None)
+        base_query = db.query(Patient).filter(Patient.clinic_id == g.clinic_id, Patient.deleted_at == None)
         if search:
             search_pattern = f"%{search}%"
-            query = query.filter(
+            base_query = base_query.filter(
                 or_(
                     Patient.full_name.ilike(search_pattern),
                     Patient.phone.ilike(search_pattern),
@@ -681,8 +692,10 @@ def get_patients():
                 )
             )
 
-        total = query.count()
-        patients = query.order_by(Patient.created_at.desc()).limit(limit).offset(offset).all()
+        # Use subquery for count to avoid full table scan
+        total = base_query.with_entities(Patient.id).count()
+        # Use index-optimized ordering
+        patients = base_query.order_by(Patient.id.desc()).limit(limit).offset(offset).all()
         return jsonify({"patients": [serialize(p) for p in patients], "total": total, "limit": limit, "offset": offset})
     finally:
         db.close()
@@ -800,6 +813,13 @@ def create_patient():
             notify(db, clinic_id=g.clinic_id, type="patient", target_role="doctor",
                    title="New patient added",
                    message=f"Secretary added patient: {full_name}")
+            # Emit real-time notification
+            emit_to_clinic(g.clinic_id, "notification_new", {
+                "type": "patient",
+                "title": "New patient added",
+                "message": f"Secretary added patient: {full_name}",
+                "created_at": datetime.utcnow().isoformat(),
+            })
 
         db.commit()
         db.refresh(patient)
@@ -1024,33 +1044,6 @@ def update_patient(patient_id):
     except Exception as e:
         db.rollback()
         return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
-
-
-@app.route("/api/patients/<int:patient_id>/attachments", methods=["GET"])
-@verify_jwt
-@limiter.limit("30 per minute")
-def get_patient_attachments(patient_id):
-    """List attachments for a specific patient in the clinic."""
-    db = get_db()
-    try:
-        patient = db.query(Patient).filter(
-            Patient.id == patient_id,
-            Patient.clinic_id == g.clinic_id,
-            Patient.deleted_at == None,
-        ).first()
-        if not patient:
-            return jsonify({"error": "Not found"}), 404
-
-        files = storage.list_files(g.clinic_id)
-        prefix = f"{patient.global_id}_" if patient.global_id else ""
-        attachments = []
-        for filename in files:
-            if prefix and filename.startswith(prefix):
-                url = f"/api/v2/attachments/{g.clinic_id}/{filename}"
-                attachments.append({"filename": filename, "url": url})
-        return jsonify({"attachments": attachments})
     finally:
         db.close()
 
@@ -1398,6 +1391,13 @@ def create_appointment():
             notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
                    title="New appointment",
                    message=f"{patient_name} — {date} {start_time}–{end_time} (by {g.role})")
+            # Emit real-time notification
+            emit_to_clinic(g.clinic_id, "notification_new", {
+                "type": "appointment",
+                "title": "New appointment",
+                "message": f"{patient_name} — {date} {start_time}–{end_time} (by {g.role})",
+                "created_at": datetime.utcnow().isoformat(),
+            })
             
             # Transaction commits automatically when exiting with block
         
@@ -1464,6 +1464,13 @@ def update_appointment(appt_id):
         notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
                title="Appointment updated",
                message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status}")
+        # Emit real-time notification
+        emit_to_clinic(g.clinic_id, "notification_new", {
+            "type": "appointment",
+            "title": "Appointment updated",
+            "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status}",
+            "created_at": datetime.utcnow().isoformat(),
+        })
 
         db.commit()
         db.refresh(appt)
@@ -1507,6 +1514,13 @@ def delete_appointment(appt_id):
             notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
                    title="Appointment cancelled",
                    message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time}")
+            # Emit real-time notification
+            emit_to_clinic(g.clinic_id, "notification_new", {
+                "type": "appointment",
+                "title": "Appointment cancelled",
+                "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time}",
+                "created_at": datetime.utcnow().isoformat(),
+            })
 
         db.commit()
         return jsonify({"success": True})

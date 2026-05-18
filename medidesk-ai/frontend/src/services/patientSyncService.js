@@ -17,6 +17,24 @@ import cloudApi from '../cloudApi';
 import { pushSyncError, resolvePatientErrors } from './syncErrorQueue';
 
 const _syncQueueSubscribers = new Set();
+const _pendingRequests = new Map(); // action:entityId -> timestamp
+
+function _checkDoubleSubmit(action, entityId) {
+  const key = `${action}:${entityId}`;
+  const now = Date.now();
+  const lastSubmit = _pendingRequests.get(key);
+  // Prevent duplicate submissions within 2 seconds
+  if (lastSubmit && (now - lastSubmit) < 2000) {
+    console.warn('[sync] double-submit blocked:', key);
+    return true;
+  }
+  _pendingRequests.set(key, now);
+  // Clean up old entries (older than 10 seconds)
+  for (const [k, v] of _pendingRequests) {
+    if (now - v > 10000) _pendingRequests.delete(k);
+  }
+  return false;
+}
 
 function _notifySyncQueueSubscribers() {
   _syncQueueSubscribers.forEach(cb => {
@@ -173,6 +191,9 @@ async function fetchCloudPatientVersion(patient) {
 // ── Push new patient to cloud ─────────────────────────────────────────────────
 
 export async function syncPatientToCloud(patient) {
+  if (_checkDoubleSubmit('create', patient.global_id || patient.id)) {
+    return null;
+  }
   try {
     const res = await cloudApi.post('/patients', {
       full_name:   patient.full_name,
@@ -207,6 +228,10 @@ export async function syncPatientToCloud(patient) {
 // UI can open the merge modal immediately.
 
 export async function updateCloudPatient(patient) {
+  const entityId = patient.global_id || patient.id;
+  if (_checkDoubleSubmit('update', entityId)) {
+    return { ok: false, conflict: false, blocked: true };
+  }
   const payload = {
     full_name:   patient.full_name,
     phone:       patient.phone       || '',
@@ -493,9 +518,14 @@ export async function secretaryCloudWrite(patient, updatedFields) {
 export async function deleteCloudPatient(patient) {
   const globalId = patient.global_id;
   const cloudId  = patient.cloud_id;
+  const entityId = globalId || String(cloudId);
 
-  if (!globalId && !cloudId) {
+  if (!entityId) {
     console.warn('[sync] deleteCloudPatient: no identity key — skipping cloud delete');
+    return;
+  }
+
+  if (_checkDoubleSubmit('delete', entityId)) {
     return;
   }
 

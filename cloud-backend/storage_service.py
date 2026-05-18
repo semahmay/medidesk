@@ -169,16 +169,30 @@ class S3Storage:
     """S3-compatible object storage — used in SaaS / production mode."""
 
     def __init__(self):
-        import boto3
         self.bucket = os.getenv("S3_BUCKET", "medidesk-attachments")
-        self.client = boto3.client(
-            "s3",
-            endpoint_url=os.getenv("S3_ENDPOINT_URL"),
-            aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
-            aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
-            region_name=os.getenv("S3_REGION", "us-east-1"),
-        )
-        self._ensure_bucket()
+        self._client = None  # lazy init — fork-safe for Gunicorn workers
+
+    def _get_client(self):
+        """Lazy-initialize boto3 S3 client. Safe to call after Gunicorn forks."""
+        if self._client is None:
+            import boto3
+            endpoint = os.getenv("S3_ENDPOINT_URL")
+            access_key = os.getenv("S3_ACCESS_KEY")
+            secret_key = os.getenv("S3_SECRET_KEY")
+            logger.info(f"[storage] init S3 client endpoint={endpoint} bucket={self.bucket}")
+            self._client = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=os.getenv("S3_REGION", "us-east-1"),
+            )
+            self._ensure_bucket()
+        return self._client
+
+    @property
+    def client(self):
+        return self._get_client()
 
     def _ensure_bucket(self):
         try:

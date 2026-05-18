@@ -146,12 +146,19 @@
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+  border-radius: 8px;
 }
 
 .btn-danger {
   background: #dc3545;
   color: white;
-  border-color: #dc3545;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .btn-danger:hover {

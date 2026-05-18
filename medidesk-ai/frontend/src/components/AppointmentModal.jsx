@@ -51,6 +51,18 @@ const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecret
     load();
   }, []);
 
+  // Keyboard: Escape closes modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setError(''); // clear error on any change
@@ -136,10 +148,7 @@ const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecret
 
           {/* Inline error */}
           {error && (
-            <div style={{
-              padding: '8px 12px', background: '#fee2e2', border: '1px solid #fecaca',
-              borderRadius: 6, color: '#991b1b', fontSize: 13, marginBottom: 12,
-            }}>
+            <div className="appt-error">
               {error}
             </div>
           )}
@@ -204,7 +213,7 @@ const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecret
 
           {/* Inline time validation hint */}
           {formData.start_time && formData.end_time && formData.start_time >= formData.end_time && (
-            <div style={{ fontSize: 12, color: '#dc2626', marginTop: -8, marginBottom: 8 }}>
+            <div className="appt-time-error">
               End time must be after start time.
             </div>
           )}
@@ -225,7 +234,7 @@ const AppointmentModal = ({ onClose, onSave, selectedDate, appointment, isSecret
               value={formData.notes}
               onChange={handleChange}
               rows={2}
-              style={{ width: '100%', resize: 'vertical', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+              className="appt-textarea"
               placeholder="Any notes for this appointment..."
             />
           </div>

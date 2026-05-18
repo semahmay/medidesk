@@ -97,6 +97,8 @@ const Sidebar = ({ activePage }) => {
           </div>
         )}
 
+        
+
         {/* Clinic Chat — with unread badge */}
         <div
           className={`sidebar-nav-item ${active === 'clinic-chat' ? 'active' : ''}`}

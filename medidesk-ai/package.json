@@ -1,12 +1,23 @@
 {
   "name": "medidesk-ai",
   "version": "1.0.0",
-  "description": "AI-powered patient management tool for doctors",
+  "description": "AI-powered patient management tool for doctors and clinics",
   "main": "electron/main.js",
   "homepage": "./",
+  "author": {
+    "name": "MediDesk AI",
+    "email": "support@medidesk.ai"
+  },
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "dev": "electron . --enable-logging",
     "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "build:all": "electron-builder --win nsis portable",
+    "build:dir": "electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps",
     "install-deps": "npm install && cd frontend && npm install"
   },
   "keywords": [
@@ -14,28 +25,74 @@
     "electron",
     "react",
     "ai",
-    "patient-management"
+    "patient-management",
+    "clinic",
+    "healthcare"
   ],
-  "author": "MediDesk AI",
-  "license": "MIT",
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
   },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
   "build": {
     "appId": "com.medidesk.ai",
     "productName": "MediDesk AI",
+    "copyright": "Copyright (C) 2024 MediDesk AI",
+    "asar": true,
+    "compression": "maximum",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "electron/**/*",
       "frontend/build/**/*",
       "package.json"
     ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MediDesk AI",
+      "perMachine": false,
+      "differentialPackage": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://releases.medidesk.ai",
+      "channel": "latest"
     }
   },
-  "dependencies": {}
+  "electronUpdater": {
+    "provider": "generic",
+    "url": "https://releases.medidesk.ai"
+  }
 }

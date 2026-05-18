@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import cloudApi from '../cloudApi';
 import NotesEditor from './NotesEditor';
 
-const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSelect, onEditPatient, onDeletePatient, onColumnsChange, fetchPatients }) => {
+const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, onPatientSelect, onEditPatient, onDeletePatient, onColumnsChange, fetchPatients }) => {
   const [columns, setColumns] = useState([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [notesEditorPatient, setNotesEditorPatient] = useState(null);
@@ -41,23 +41,25 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
     setNotesEditorPatient(patient);
   };
 
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
       setSortKey(key);
       setSortDir('asc');
     }
-  };
+  }, [sortKey]);
 
-  const sortedPatients = [...patients].sort((a, b) => {
-    if (!sortKey) return 0;
-    const valA = (a[sortKey] || '').toString().toLowerCase();
-    const valB = (b[sortKey] || '').toString().toLowerCase();
-    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
+  const sortedPatients = useMemo(() => {
+    if (!sortKey) return patients;
+    return [...patients].sort((a, b) => {
+      const valA = (a[sortKey] || '').toString().toLowerCase();
+      const valB = (b[sortKey] || '').toString().toLowerCase();
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [patients, sortKey, sortDir]);
 
   const SortIcon = ({ col }) => {
     if (sortKey !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>;
@@ -219,7 +221,13 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
       
       {patients.length === 0 && (
         <div className="empty-table">
-          <p>No patients found</p>
+          <svg viewBox="0 0 24 24" fill="none" strokeWidth="1.5">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <p>No patients yet</p>
+          <p style={{ fontSize: 12, marginTop: 8 }}>Add your first patient to get started</p>
         </div>
       )}
 
@@ -243,7 +251,7 @@ const PatientTable = ({ patients, onUpdatePatient, selectedPatient, onPatientSel
       )}
     </div>
   );
-};
+});
 
 const AddColumnModal = ({ onClose, onColumnAdded }) => {
   const [columnName, setColumnName] = useState('');
@@ -272,36 +280,34 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal">
-        <div className="modal-header">
+    <div className="pf-overlay">
+      <div className="pf-modal">
+        <div className="pf-header">
           <h2>Add Custom Column</h2>
-          <button className="btn btn-outline" onClick={onClose}>
-            ×
-          </button>
+          <button className="pf-close-btn" onClick={onClose}>×</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Column Name</label>
+        <form onSubmit={handleSubmit} className="pf-body">
+          <div className="pf-group">
+            <label className="pf-label">Column Name *</label>
             <input
               type="text"
-              className="form-input"
+              className="pf-input"
               value={columnName}
               onChange={(e) => {
                 setColumnName(e.target.value);
                 setError('');
               }}
-              placeholder="Enter column name"
+              placeholder="e.g., Blood Type, Allergies"
               required
               autoFocus
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Field Type</label>
+          <div className="pf-group">
+            <label className="pf-label">Field Type</label>
             <select
-              className="form-select"
+              className="pf-select"
               value={columnType}
               onChange={(e) => setColumnType(e.target.value)}
             >
@@ -313,28 +319,28 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
           </div>
 
           {error && (
-            <div style={{
-              padding: '8px 12px', background: '#fee2e2', border: '1px solid #fecaca',
-              borderRadius: 6, color: '#991b1b', fontSize: 13,
-            }}>
+            <div className="pf-error">
               {error}
             </div>
           )}
-        </form>
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={loading || !columnName.trim()}
-          >
-            {loading ? 'Adding...' : 'Add Column'}
-          </button>
-        </div>
+          <div className="pf-actions">
+            <button
+              type="button"
+              className="pf-btn-cancel"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="pf-btn-primary"
+              disabled={loading || !columnName.trim()}
+            >
+              {loading ? 'Adding...' : 'Add Column'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     full_name: '', phone: '', email: '', appointment: '', status: 'Active', notes: ''
   });
+  const [quickMode, setQuickMode] = useState(false); // Skip notes for fast intake
   const [customFields, setCustomFields] = useState({});
   const [columns, setColumns]           = useState([]);
   const [loading, setLoading]           = useState(false);
@@ -58,6 +59,29 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     }
   }, [patient, columns]);
 
+  // Keyboard: Escape closes, Enter submits
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+      }
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+        const form = e.target.closest('form');
+        if (form) {
+          const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
+          const currentIndex = inputs.indexOf(e.target);
+          if (currentIndex < inputs.length - 1) {
+            e.preventDefault();
+            inputs[currentIndex + 1]?.focus();
+          }
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isDirty]);
+
   const fetchColumns = async () => {
     try {
       const response = await cloudApi.get('/columns');
@@ -85,8 +109,9 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.notes.trim()) {
-      alert('Notes field is mandatory');
+    // Allow quick mode (no notes) for secretaries/doctors who want fast intake
+    if (!quickMode && !formData.notes.trim()) {
+      alert('Notes field is mandatory. Use Quick Mode for fast intake without notes.');
       return;
     }
 
@@ -214,7 +239,21 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     <div className="pf-overlay">
       <div className="pf-modal">
         <div className="pf-header">
-          <h2>{patient ? 'Edit Patient' : 'Add New Patient'}</h2>
+          <div>
+            <h2>{patient ? 'Edit Patient' : 'Add New Patient'}</h2>
+            {!patient && !secretary && (
+              <button
+                type="button"
+                onClick={() => setQuickMode(!quickMode)}
+                style={{
+                  fontSize: 12, color: quickMode ? '#1D9E75' : '#64748b',
+                  background: 'none', border: 'none', cursor: 'pointer', marginTop: 4,
+                }}
+              >
+                {quickMode ? '⚡ Quick mode ON - no notes required' : '⚡ Quick mode - skip notes for fast intake'}
+              </button>
+            )}
+          </div>
           <button className="pf-close-btn" onClick={handleClose}>×</button>
         </div>
 
@@ -228,6 +267,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
               value={formData.full_name}
               onChange={handleChange}
               required
+              autoFocus
             />
           </div>
 
@@ -297,29 +337,29 @@ const PatientForm = ({ patient, onClose, onSave }) => {
               {renderCustomField(column)}
             </div>
           ))}
-        </form>
 
-        <div className="pf-footer">
-          <button className="pf-btn-secondary" onClick={handleClose}>
-            Close
-          </button>
-          {syncStatus && (
-            <span style={{
-              fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 600,
-              background: syncStatus === 'synced' ? '#d1fae5' : syncStatus === 'offline' ? '#fef3c7' : '#dbeafe',
-              color:      syncStatus === 'synced' ? '#065f46' : syncStatus === 'offline' ? '#92400e' : '#1e40af',
-            }}>
-              {syncStatus === 'saving' ? '⟳ Saving...' : syncStatus === 'synced' ? '✓ Synced' : '⚠ Offline — queued'}
-            </span>
-          )}
-          <button
-            type="submit"
-            className="pf-btn-primary"
-            disabled={loading || !formData.notes.trim()}
-          >
-            {loading ? 'Saving...' : 'Save Patient'}
-          </button>
-        </div>
+          <div className="pf-footer">
+            <button type="button" className="pf-btn-secondary" onClick={handleClose}>
+              Close
+            </button>
+            {syncStatus && (
+              <span style={{
+                fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 600,
+                background: syncStatus === 'synced' ? '#d1fae5' : syncStatus === 'offline' ? '#fef3c7' : '#dbeafe',
+                color:      syncStatus === 'synced' ? '#065f46' : syncStatus === 'offline' ? '#92400e' : '#1e40af',
+              }}>
+                {syncStatus === 'saving' ? '⟳ Saving...' : syncStatus === 'synced' ? '✓ Synced' : '⚠ Offline — queued'}
+              </span>
+            )}
+            <button
+              type="submit"
+              className="pf-btn-primary"
+              disabled={loading || (!quickMode && !formData.notes.trim())}
+            >
+              {loading ? 'Saving...' : quickMode ? '⚡ Quick Save' : 'Save Patient'}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Unsaved changes confirmation */}

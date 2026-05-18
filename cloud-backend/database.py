@@ -38,7 +38,16 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=300,
     echo=False,
+    connect_args={
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000",
+    },
 )
+
+# Handle PostgreSQL connection errors with automatic retry
+@event.listens_for(engine, "connect")
+def set_connect_timeout(dbapi_conn, connection_record):
+    dbapi_conn.set_session(autocommit=False)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

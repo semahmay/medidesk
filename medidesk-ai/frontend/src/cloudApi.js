@@ -161,20 +161,16 @@ function _trackSeq(seq) {
   return true; // new event — process it
 }
 
-export function connectRealtime() {
+export async function connectRealtime() {
   // Only connect in web/SaaS mode — Electron uses polling
   if (window.electronAPI) return;
   if (_socket) return; // already connected
   if (!_accessToken) return;
 
-  // Use require() wrapped in try/catch so webpack doesn't fail when
-  // socket.io-client is not installed (Electron build).
-  // eslint-disable-next-line
   let io;
   try {
-    // This will be tree-shaken in Electron builds where socket.io-client is absent.
-    // In SaaS web builds, install: npm install socket.io-client
-    io = require('socket.io-client').io;
+    const mod = await import('socket.io-client');
+    io = mod.io || mod.default?.io;
   } catch {
     console.info('[realtime] socket.io-client not available — real-time disabled (Electron mode)');
     return;
@@ -185,10 +181,11 @@ export function connectRealtime() {
 
   _socket = io(WS_BASE, {
     auth: { token: `Bearer ${_accessToken}`, last_seq: _lastSeq },
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionAttempts: 10,
+    rememberTransport: false,
   });
 
     _socket.on('connect', () => {
@@ -231,9 +228,25 @@ export function connectRealtime() {
 
 export function disconnectRealtime() {
   if (_socket) {
+    // Clean up all event handlers to prevent memory leaks
+    _socket.off('connect');
+    _socket.off('disconnect');
+    _socket.off('reconnect');
+    _socket.off('missed_events');
+    const EVENTS = [
+      'patient_created', 'patient_updated', 'patient_deleted',
+      'message_new',
+      'appointment_new', 'appointment_updated',
+      'notification_new',
+    ];
+    EVENTS.forEach(evt => _socket.off(evt));
     _socket.disconnect();
     _socket = null;
   }
+  // Clear handlers and dedup state
+  Object.keys(_handlers).forEach(key => delete _handlers[key]);
+  _processedSeqs.clear();
+  _lastSeq = 0;
 }
 
 export function onRealtimeEvent(event, callback) {

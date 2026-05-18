@@ -15,6 +15,8 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
   const [clinicInfo, setClinicInfo] = useState({ doctor_name: null, clinic_name: null });
   const [pendingSync, setPendingSync] = useState(0);
   const [failedSyncCount, setFailedSyncCount] = useState(0);
+  const [appVersion, setAppVersion] = useState('1.0.0');
+  const [buildInfo, setBuildInfo] = useState(null);
   // Notifications
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -27,6 +29,18 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
   const { setShowSyncCenter } = useUX();
 
   useEffect(() => {
+    // Load app version from Electron
+    if (window.electronAPI?.getVersion) {
+      window.electronAPI.getVersion().then(v => {
+        if (v) setAppVersion(v);
+      }).catch(() => {});
+    }
+    if (window.electronAPI?.getBuildInfo) {
+      window.electronAPI.getBuildInfo().then(info => {
+        if (info) setBuildInfo(info);
+      }).catch(() => {});
+    }
+
     cloudApi.get('/clinics/me')
       .then(res => {
         if (res.data) setClinicInfo({ doctor_name: res.data.doctor_name, clinic_name: res.data.clinic_name });
@@ -55,6 +69,9 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     refreshCounts();
     fetchNotifs();
 
+    // Poll for notifications every 30 seconds (since SocketIO doesn't work in Electron)
+    const notificationPoll = setInterval(fetchNotifs, 30000);
+
     const unsubQueue = subscribeSyncQueueUpdates(refreshCounts);
     const unsubErrors = subscribeSyncErrorChanges(refreshCounts);
 
@@ -71,7 +88,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     });
 
     const unsubMessage = onRealtimeEvent('message_new', (payload) => {
-      if (!window.location.pathname.includes('clinic-chat')) {
+      if (!window.location.hash.includes('clinic-chat')) {
         // Only increment when user is not already on the chat page.
         if (lastMsgIdRef.current && payload.id !== lastMsgIdRef.current) {
           setUnreadCount(prev => prev + 1);
@@ -81,6 +98,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     });
 
     return () => {
+      clearInterval(notificationPoll);
       unsubQueue?.();
       unsubErrors?.();
       unsubNotification?.();
@@ -96,6 +114,21 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  // Refresh notifications when window gains focus
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const res = await cloudApi.get('/notifications');
+        setNotifications(res.data.notifications || []);
+        setUnreadCount(res.data.unread_count || 0);
+      } catch {
+        // non-critical
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const handleLanguageToggle = (lang) => {
@@ -365,6 +398,11 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
                 </svg>
                 Log out
               </button>
+              <div className="user-dropdown-divider" />
+              <div style={{ padding: '8px 12px', fontSize: 11, color: '#64748b', textAlign: 'center' }}>
+                v{appVersion}
+                {buildInfo && <span> · {buildInfo.platform}</span>}
+              </div>
             </div>
           )}
         </div>

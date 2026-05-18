@@ -112,7 +112,7 @@ const Dashboard = ({ settings, currentUser }) => {
   // ── Real-time chat updates — replace polling with WebSocket events.
   useEffect(() => {
     const unsub = onRealtimeEvent('message_new', (payload) => {
-      if (!window.location.pathname.includes('clinic-chat')) {
+      if (!window.location.hash.includes('clinic-chat')) {
         incrementUnread(1);
       }
       lastMsgIdRef.current = payload.id;
@@ -303,8 +303,39 @@ const Dashboard = ({ settings, currentUser }) => {
     // This will be handled by PatientDetail component
   };
 
+  // Listen for keyboard shortcut events
+  useEffect(() => {
+    const handleQuickAdd = () => {
+      if (!secretary || (secretary && !cloudOffline)) {
+        setShowPatientForm(true);
+        setEditingPatient(null);
+      }
+    };
+    const handleFocusSearch = () => {
+      const searchInput = document.querySelector('.search-input');
+      if (searchInput) searchInput.focus();
+    };
+    window.addEventListener('quick-add-patient', handleQuickAdd);
+    window.addEventListener('focus-search', handleFocusSearch);
+    return () => {
+      window.removeEventListener('quick-add-patient', handleQuickAdd);
+      window.removeEventListener('focus-search', handleFocusSearch);
+    };
+  }, [secretary, cloudOffline]);
+
   return (
     <div className="app-container">
+      {/* Floating Quick Action Button */}
+      {!cloudOffline && (
+        <button
+          onClick={() => { setShowPatientForm(true); setEditingPatient(null); }}
+          className="fab-add-btn"
+          title="Add Patient (Ctrl+N)"
+        >
+          +
+        </button>
+      )}
+
       {/* Sidebar */}
       <Sidebar activePage="patients" />
 
@@ -315,16 +346,7 @@ const Dashboard = ({ settings, currentUser }) => {
 
         {/* Secretary banner */}
         {secretary && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            margin: '12px 16px 0',
-            padding: '10px 16px',
-            background: '#f5f3ff',
-            border: '1px solid #ddd6fe',
-            borderRadius: 8,
-            fontSize: 13,
-            color: '#5b21b6',
-          }}>
+          <div className="banner-secretary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
@@ -337,13 +359,7 @@ const Dashboard = ({ settings, currentUser }) => {
 
         {/* Cloud offline warning — full width, high contrast */}
         {cloudOffline && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            margin: '0', padding: '10px 20px',
-            background: '#92400e', color: '#fff',
-            fontSize: 13, fontWeight: 600,
-            borderBottom: '2px solid #78350f',
-          }}>
+          <div className="banner-cloud-offline">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
@@ -355,16 +371,7 @@ const Dashboard = ({ settings, currentUser }) => {
 
         {/* Sync queue warning — shown when offline edits failed to replay */}
         {syncWarning && !cloudOffline && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            margin: '8px 16px 0',
-            padding: '8px 14px',
-            background: '#fff7ed',
-            border: '1px solid #fed7aa',
-            borderRadius: 8,
-            fontSize: 12,
-            color: '#9a3412',
-          }}>
+          <div className="banner-sync-warning">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -374,13 +381,8 @@ const Dashboard = ({ settings, currentUser }) => {
         )}
 
         {syncIssues && syncIssues.length > 0 && (
-          <div style={{
-            display: 'flex', flexDirection: 'column', gap: 10,
-            margin: '8px 16px 0', padding: '12px 14px',
-            background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8,
-            color: '#991b1b', fontSize: 13,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div className="sync-issues-panel">
+            <div className="sync-issues-row">
               <div>
                 <strong>⚠️ Sync Issues Detected</strong>
                 <div style={{ marginTop: 4, color: '#7f1d1d' }}>
@@ -389,21 +391,21 @@ const Dashboard = ({ settings, currentUser }) => {
               </div>
               <button
                 onClick={() => clearSyncIssues()}
-                style={{ background: '#fff', border: '1px solid #fca5a5', borderRadius: 6, padding: '6px 12px', color: '#991b1b', cursor: 'pointer' }}
+                className="sync-issues-clear-btn"
               >
                 Clear
               </button>
             </div>
             {syncIssues.slice(0, 3).map(issue => (
-              <div key={issue.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div key={issue.id} className="sync-issues-row">
+                <div className="sync-issues-detail">
                   <div style={{ fontWeight: 600 }}>{issue.message}</div>
                   <div style={{ fontSize: 12, color: '#7f1d1d' }}>{issue.timestamp ? new Date(issue.timestamp).toLocaleString() : ''}</div>
                 </div>
                 {issue.patientId && (
                   <button
                     onClick={() => handlePatientSelect({ id: issue.patientId })}
-                    style={{ background: '#fee2e2', border: '1px solid #fecdd3', borderRadius: 6, padding: '6px 10px', color: '#991b1b', cursor: 'pointer', fontSize: 12 }}
+                    className="sync-issues-btn"
                   >
                     Reload
                   </button>
@@ -422,7 +424,7 @@ const Dashboard = ({ settings, currentUser }) => {
         <div ref={contentRef} className="resizable-layout">
 
           {/* Left — Patient List */}
-          <div style={{ width: `${leftWidth}%`, minWidth: '20%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: `${leftWidth}%`, minWidth: '20%' }} className="layout-pane">
             <PatientList
               patients={patients}
               selectedPatient={selectedPatient}
@@ -442,21 +444,10 @@ const Dashboard = ({ settings, currentUser }) => {
           </div>
 
           {/* Drag divider */}
-          <div
-            onMouseDown={onDividerMouseDown}
-            style={{
-              width: 6, cursor: 'col-resize', flexShrink: 0, background: '#e2e8f0',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.2s', userSelect: 'none',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = '#3b82f6'}
-            onMouseLeave={e => e.currentTarget.style.background = '#e2e8f0'}
-          >
-            <div style={{ width: 2, height: 32, background: '#94a3b8', borderRadius: 2 }} />
-          </div>
+          <div className="resize-divider" onMouseDown={onDividerMouseDown} />
 
           {/* Right — Patient Detail */}
-          <div style={{ flex: 1, minWidth: '30%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ flex: 1, minWidth: '30%' }} className="layout-pane">
             <PatientDetail
               selectedPatient={selectedPatient}
               settings={settings}

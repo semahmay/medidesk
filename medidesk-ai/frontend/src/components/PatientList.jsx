@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import PatientTable from './PatientTable';
 import '../new-design.css';
 
-const PatientList = ({ 
+const PatientList = React.memo(({ 
   patients, 
   selectedPatient, 
   onPatientSelect, 
@@ -18,17 +18,27 @@ const PatientList = ({
   onLoadMore,
   onUpdatePatient
 }) => {
-  // Calculate stats
-  const calculateStats = () => {
+  const searchInputRef = useRef(null);
+
+  // Auto-focus search on Ctrl+F / Cmd+F event
+  useEffect(() => {
+    const handleFocusSearch = () => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
+      }
+    };
+    window.addEventListener('focus-search', handleFocusSearch);
+    return () => window.removeEventListener('focus-search', handleFocusSearch);
+  }, []);
+  // Memoize stats calculation to prevent unnecessary recalculations
+  const stats = useMemo(() => {
     const total = patients.length;
     const active = patients.filter(p => p.status === 'Active').length;
     const followUp = patients.filter(p => p.status === 'Follow-up').length;
     const urgent = patients.filter(p => p.status === 'Urgent').length;
-    
     return { total, active, followUp, urgent };
-  };
-
-  const stats = calculateStats();
+  }, [patients]);
 
   return (
     <div className="left-panel">
@@ -51,6 +61,7 @@ const PatientList = ({
             <path d="m21 21-4.35-4.35"/>
           </svg>
           <input
+            ref={searchInputRef}
             type="text"
             className="search-input"
             placeholder="Search patients..."
@@ -103,11 +114,11 @@ const PatientList = ({
           />
         )}
       </div>
-        {patients.length >= 50 && (
+        {patients.length >= 50 && onLoadMore && (
           <button onClick={onLoadMore} className="btn btn-secondary" style={{ width: '100%', marginTop: '10px' }}>Load More</button>
         )}
     </div>
   );
-};
+});
 
 export default PatientList;
