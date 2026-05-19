@@ -60,8 +60,19 @@ def add_security_headers(response):
 # Electron desktop (file://), production domain, dev servers.
 # Example: ALLOWED_ORIGINS=file://,http://localhost:3000,https://medidesk.app
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+_flask_env = os.getenv("FLASK_ENV", "production")
 
 if not _raw_origins:
+    if _flask_env == "production":
+        import logging as _logging
+        _logging.getLogger("cors").critical(
+            "[CORS] FATAL: ALLOWED_ORIGINS not set in production. "
+            "Refusing to start with open CORS."
+        )
+        raise RuntimeError(
+            "ALLOWED_ORIGINS environment variable is required in production. "
+            "Set it to a comma-separated list of allowed origins."
+        )
     _allowed_origins = ["file://", "http://localhost", "http://localhost:3000", "http://127.0.0.1"]
     import logging as _logging
     _logging.getLogger("cors").warning(
@@ -151,6 +162,10 @@ def serialize(obj):
     return result
 
 
+def error_response(message, code="UNKNOWN_ERROR", status_code=400):
+    return jsonify({"error": message, "code": code}), status_code
+
+
 # ── Auth Routes (public — no JWT required) ────────────────────────────────────
 
 @app.route("/api/auth/google", methods=["POST"])
@@ -165,7 +180,7 @@ def auth_google():
     google_token = data.get("google_token")
 
     if not google_token:
-        return jsonify({"error": "google_token is required"}), 400
+        return error_response("google_token is required", "VALIDATION_ERROR", 400)
 
     try:
         resp = http_requests.get(
@@ -174,17 +189,17 @@ def auth_google():
             timeout=10,
         )
         if resp.status_code != 200:
-            return jsonify({"error": "Invalid Google token"}), 401
+            return error_response("Invalid Google token", "UNAUTHORIZED", 401)
         google_user = resp.json()
     except Exception as e:
-        return jsonify({"error": f"Google verification failed: {str(e)}"}), 500
+            return error_response(f"Google verification failed: {str(e)}", "INTERNAL_ERROR", 500)
 
     google_id = google_user.get("id")
     email     = google_user.get("email")
     name      = google_user.get("name", email)
 
     if not google_id:
-        return jsonify({"error": "Could not retrieve Google user ID"}), 400
+        return error_response("Could not retrieve Google user ID", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -237,7 +252,7 @@ def auth_google():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -254,7 +269,7 @@ def secretary_check():
     name      = data.get("name", "").strip().lower()
 
     if not clinic_id or not name:
-        return jsonify({"error": "clinic_id and name are required"}), 400
+        return error_response("clinic_id and name are required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -288,9 +303,9 @@ def secretary_set_password():
     password  = data.get("password", "")
 
     if not all([clinic_id, name, password]):
-        return jsonify({"error": "clinic_id, name, and password are required"}), 400
+        return error_response("clinic_id, name, and password are required", "VALIDATION_ERROR", 400)
     if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
+        return error_response("Password must be at least 6 characters", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -300,9 +315,9 @@ def secretary_set_password():
             .first()
         )
         if not user:
-            return jsonify({"error": "Secretary not found in this clinic"}), 404
+            return error_response("Secretary not found in this clinic", "NOT_FOUND", 404)
         if user.status != "invited":
-            return jsonify({"error": "Account already activated or invalid"}), 400
+            return error_response("Account already activated or invalid", "CONFLICT", 400)
 
         user.password_hash = hash_password(password)
         user.status        = "active"
@@ -317,7 +332,7 @@ def secretary_set_password():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -336,7 +351,7 @@ def secretary_login():
     password  = data.get("password", "")
 
     if not all([clinic_id, name, password]):
-        return jsonify({"error": "clinic_id, name, and password are required"}), 400
+        return error_response("clinic_id, name, and password are required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -346,21 +361,21 @@ def secretary_login():
             .first()
         )
         if not user:
-            return jsonify({"error": "Secretary not found in this clinic"}), 404
+            return error_response("Secretary not found in this clinic", "NOT_FOUND", 404)
 
         # Block login for non-active accounts
         effective_status = user.status or ("active" if user.password_hash else "invited")
         if effective_status != "active":
-            return jsonify({"error": "Account not activated. Please set your password first."}), 403
+            return error_response("Account not activated. Please set your password first.", "FORBIDDEN", 403)
 
         if not user.password_hash:
-            return jsonify({"error": "No password set. Contact your doctor."}), 403
+            return error_response("No password set. Contact your doctor.", "FORBIDDEN", 403)
         if not check_password(password, user.password_hash):
             _log("failed_login", user_id=user.id, role="secretary", clinic_id=clinic_id)
             audit(db, clinic_id=clinic_id, user_id=user.id, user_role="secretary",
                   action_type=Actions.SECRETARY_LOGIN_FAIL, entity_type="auth", entity_id=user.id)
             db.commit()
-            return jsonify({"error": "Invalid password"}), 401
+            return error_response("Invalid password", "UNAUTHORIZED", 401)
 
         user_dict = {
             "id": user.id, "role": user.role,
@@ -390,11 +405,11 @@ def auth_refresh():
     data = request.get_json() or {}
     refresh_token = data.get("refresh_token")
     if not refresh_token:
-        return jsonify({"error": "refresh_token is required"}), 400
+        return error_response("refresh_token is required", "VALIDATION_ERROR", 400)
 
     new_access, new_refresh = refresh_access_token(refresh_token)
     if not new_access:
-        return jsonify({"error": "Invalid or expired refresh token"}), 401
+        return error_response("Invalid or expired refresh token", "UNAUTHORIZED", 401)
 
     return jsonify({"access_token": new_access, "refresh_token": new_refresh})
 
@@ -418,7 +433,7 @@ def revoke_user_tokens():
     data    = request.get_json() or {}
     user_id = data.get("user_id", "").strip()
     if not user_id:
-        return jsonify({"error": "user_id is required"}), 400
+        return error_response("user_id is required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -426,7 +441,7 @@ def revoke_user_tokens():
         from models import User as UserModel, RevokedToken
         target = db.query(UserModel).filter_by(id=user_id, clinic_id=g.clinic_id).first()
         if not target:
-            return jsonify({"error": "User not found in your clinic"}), 404
+            return error_response("User not found in your clinic", "NOT_FOUND", 404)
 
         # Store a wildcard revocation marker keyed by user_id.
         # verify_jwt checks both jti-specific and user-level revocations.
@@ -447,7 +462,7 @@ def revoke_user_tokens():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -465,7 +480,7 @@ def create_clinic():
     data = request.get_json() or {}
     clinic_name = data.get("name", "").strip()
     if not clinic_name:
-        return jsonify({"error": "name is required"}), 400
+        return error_response("name is required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
@@ -495,7 +510,7 @@ def create_clinic():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -519,13 +534,13 @@ def join_clinic():
 def get_clinic_by_doctor(doctor_user_id):
     """Doctor looks up their own clinic. Enforces they can only see their own."""
     if g.user_id != doctor_user_id:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
 
     db = get_db()
     try:
         clinic = db.query(Clinic).filter_by(doctor_user_id=g.user_id).first()
         if not clinic:
-            return jsonify({"error": "No clinic found for this doctor"}), 404
+            return error_response("No clinic found for this doctor", "NOT_FOUND", 404)
         return jsonify({"clinic_id": clinic.id, "clinic": serialize(clinic)})
     finally:
         db.close()
@@ -537,13 +552,13 @@ def get_clinic_by_doctor(doctor_user_id):
 def get_clinic(clinic_id_param):
     """Return clinic info. User can only view their own clinic."""
     if g.clinic_id != clinic_id_param:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
 
     db = get_db()
     try:
         clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
         if not clinic:
-            return jsonify({"error": "Clinic not found"}), 404
+            return error_response("Clinic not found", "NOT_FOUND", 404)
 
         users = db.query(User).filter_by(clinic_id=g.clinic_id).all()
         return jsonify({
@@ -568,14 +583,14 @@ def create_secretary():
     email = data.get("email", "").strip() or None
 
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        return error_response("name is required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
         # Prevent duplicate names in the same clinic
         existing = db.query(User).filter_by(clinic_id=g.clinic_id, name=name, role="secretary").first()
         if existing:
-            return jsonify({"error": f"A secretary named '{name}' already exists in this clinic"}), 409
+            return error_response(f"A secretary named '{name}' already exists in this clinic", "CONFLICT", 409)
 
         user = User(
             id=str(uuid.uuid4()),
@@ -596,7 +611,7 @@ def create_secretary():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -638,7 +653,7 @@ def reset_secretary_password(secretary_id):
             id=secretary_id, clinic_id=g.clinic_id, role="secretary"
         ).first()
         if not user:
-            return jsonify({"error": "Secretary not found in your clinic"}), 404
+            return error_response("Secretary not found in your clinic", "NOT_FOUND", 404)
 
         user.password_hash = None
         user.status        = "invited"
@@ -650,7 +665,172 @@ def reset_secretary_password(secretary_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
+    finally:
+        db.close()
+
+
+# ── Duplicate Detection Helpers ───────────────────────────────────────────────
+
+def _normalize_phone(phone: str) -> str:
+    """Normalize phone: remove spaces, +, dashes, parens, leading zeros."""
+    if not phone:
+        return ""
+    cleaned = phone.strip()
+    # Remove common separators
+    cleaned = cleaned.replace(" ", "").replace("-", "").replace("(", "").replace(")", "").replace(".", "")
+    # Strip leading + and 00
+    if cleaned.startswith("+"):
+        cleaned = cleaned[1:]
+    elif cleaned.startswith("00"):
+        cleaned = cleaned[2:]
+    # Remove leading zeros (keep at least one digit)
+    cleaned = cleaned.lstrip("0") or "0"
+    return cleaned
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize name: lowercase, trim, collapse double spaces."""
+    if not name:
+        return ""
+    return " ".join(name.strip().lower().split())
+
+
+def _name_similarity(a: str, b: str) -> float:
+    """Simple similarity score 0-1 based on word overlap."""
+    words_a = set(_normalize_name(a).split())
+    words_b = set(_normalize_name(b).split())
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    union = words_a | words_b
+    return len(intersection) / len(union)
+
+
+def find_possible_duplicates(db, clinic_id: str, full_name: str, phone: str, exclude_global_id: str = None) -> list:
+    """
+    Find possible duplicate patients in a clinic using name + phone matching
+    with confidence scoring.
+
+    Returns list of dicts: { confidence, reason, patient }
+    confidence: "high" | "medium" | "low"
+    """
+    results = []
+    norm_name = _normalize_name(full_name)
+    norm_phone = _normalize_phone(phone)
+    has_name = bool(norm_name)
+    has_phone = bool(norm_phone)
+
+    # Build base query
+    query = db.query(Patient).filter(
+        Patient.clinic_id == clinic_id,
+        Patient.deleted_at == None,
+    )
+
+    # Fetch all non-deleted patients in this clinic (bounded by clinic)
+    candidates = query.all()
+
+    for p in candidates:
+        if exclude_global_id and p.global_id == exclude_global_id:
+            continue
+
+        p_norm_name = _normalize_name(p.full_name or "")
+        p_norm_phone = _normalize_phone(p.phone or "")
+        name_sim = _name_similarity(full_name or "", p.full_name or "")
+
+        # HIGH confidence
+        if has_name and norm_name == p_norm_name:
+            # Exact same full name — highest confidence
+            results.append({
+                "confidence": "high",
+                "reason": "Same full name",
+                "patient": serialize(p),
+            })
+            continue
+
+        if has_phone and norm_phone and p_norm_phone and norm_phone == p_norm_phone and name_sim >= 0.5:
+            # Same phone + at least partially similar name
+            results.append({
+                "confidence": "high",
+                "reason": "Same phone number and similar name",
+                "patient": serialize(p),
+            })
+            continue
+
+        # MEDIUM confidence
+        if has_phone and norm_phone and p_norm_phone and norm_phone == p_norm_phone:
+            # Same phone but different name
+            results.append({
+                "confidence": "medium",
+                "reason": "Same phone number",
+                "patient": serialize(p),
+            })
+            continue
+
+        if has_name and name_sim >= 0.75:
+            # Very similar name (case-insensitive / trimmed)
+            results.append({
+                "confidence": "medium",
+                "reason": "Similar name",
+                "patient": serialize(p),
+            })
+            continue
+
+        # LOW confidence
+        if has_phone and norm_phone and p_norm_phone:
+            # Partial phone match (last 4 digits)
+            if len(norm_phone) >= 4 and norm_phone[-4:] == p_norm_phone[-4:]:
+                results.append({
+                    "confidence": "low",
+                    "reason": "Partial phone match",
+                    "patient": serialize(p),
+                })
+                continue
+
+            # Phone contains similar digits
+            if len(norm_phone) >= 6 and len(p_norm_phone) >= 6:
+                common_digits = sum(1 for a, b in zip(norm_phone, p_norm_phone) if a == b)
+                if common_digits >= max(len(norm_phone), len(p_norm_phone)) * 0.6:
+                    results.append({
+                        "confidence": "low",
+                        "reason": "Similar phone number",
+                        "patient": serialize(p),
+                    })
+                    continue
+
+        if has_name and name_sim >= 0.4:
+            # Partial name match
+            results.append({
+                "confidence": "low",
+                "reason": "Similar spelling",
+                "patient": serialize(p),
+            })
+            continue
+
+    return results
+
+
+@app.route("/api/patients/duplicates", methods=["GET"])
+@verify_jwt
+@limiter.limit("60 per minute")
+def check_patient_duplicates():
+    """
+    GET /api/patients/duplicates?name=...&phone=...
+    Returns possible duplicate patients with confidence scoring.
+    Never blocks — always returns results even if empty.
+    """
+    name = request.args.get("name", "").strip()
+    phone = request.args.get("phone", "").strip()
+
+    if not name and not phone:
+        return jsonify({"duplicates": []})
+
+    db = get_db()
+    try:
+        duplicates = find_possible_duplicates(db, g.clinic_id, name, phone)
+        return jsonify({"duplicates": duplicates})
+    except Exception as e:
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -771,13 +951,13 @@ def create_patient():
     full_name = data.get("full_name", "").strip()
 
     if not full_name:
-        return jsonify({"error": "full_name is required"}), 400
+        return error_response("full_name is required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
         clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
         if not clinic:
-            return jsonify({"error": "Clinic not found"}), 404
+            return error_response("Clinic not found", "NOT_FOUND", 404)
 
         # Accept a global_id from the client (doctor syncing from local) or generate one
         global_id = data.get("global_id") or str(uuid.uuid4())
@@ -808,18 +988,24 @@ def create_patient():
               action_type=Actions.CREATE_PATIENT, entity_type="patient", entity_id=global_id,
               metadata={"full_name": full_name})
 
-        # Notify doctor when secretary creates a patient
-        if g.role == "secretary":
-            notify(db, clinic_id=g.clinic_id, type="patient", target_role="doctor",
-                   title="New patient added",
-                   message=f"Secretary added patient: {full_name}")
-            # Emit real-time notification
-            emit_to_clinic(g.clinic_id, "notification_new", {
-                "type": "patient",
-                "title": "New patient added",
-                "message": f"Secretary added patient: {full_name}",
-                "created_at": datetime.utcnow().isoformat(),
-            })
+        # Notify the other role when a patient is created
+        target = "secretary" if g.role == "doctor" else "doctor"
+        by = "Doctor" if g.role == "doctor" else "Secretary"
+        notif = notify(db, clinic_id=g.clinic_id, type="patient", target_role=target,
+                       title="New patient added",
+                       message=f"{by} added patient: {full_name}",
+                       actor_role=g.role, actor_name=by)
+        # Emit real-time notification
+        notif_id = notif.id if notif else None
+        emit_to_clinic(g.clinic_id, "notification_new", {
+            "id": notif_id,
+            "type": "patient",
+            "title": "New patient added",
+            "message": f"{by} added patient: {full_name}",
+            "actor_role": g.role,
+            "actor_name": by,
+            "created_at": datetime.utcnow().isoformat(),
+        })
 
         db.commit()
         db.refresh(patient)
@@ -833,7 +1019,7 @@ def create_patient():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -854,7 +1040,7 @@ def get_patient_by_global_id(global_id_param):
             global_id=global_id_param, clinic_id=g.clinic_id
         ).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
         return jsonify({"patient": serialize(patient)})
     finally:
         db.close()
@@ -889,7 +1075,7 @@ def update_patient_by_global_id(global_id_param):
             Patient.deleted_at == None,
         ).with_for_update().first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
 
         # ── Version-based conflict detection (clock-skew-safe) ────────────────
         client_version = data.get("version")
@@ -938,7 +1124,7 @@ def update_patient_by_global_id(global_id_param):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -964,7 +1150,7 @@ def delete_patient_by_global_id(global_id_param):
         return jsonify({"success": True})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -982,7 +1168,7 @@ def get_patient(patient_id):
             Patient.deleted_at == None,
         ).first()
         if not patient:
-            return jsonify({"error": "Not found"}), 404
+            return error_response("Not found", "NOT_FOUND", 404)
         return jsonify({"patient": serialize(patient)})
     finally:
         db.close()
@@ -1003,7 +1189,7 @@ def update_patient(patient_id):
             Patient.deleted_at == None,
         ).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
 
         # ── Version-based conflict detection (clock-skew-safe) ────────────
         client_version = data.get("version")
@@ -1043,24 +1229,24 @@ def update_patient(patient_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
 
 @app.errorhandler(404)
 def not_found_error(e):
-    return jsonify({"error": "Not found"}), 404
+    return error_response("Not found", "NOT_FOUND", 404)
 
 
 @app.errorhandler(405)
 def method_not_allowed_error(e):
-    return jsonify({"error": "Method not allowed"}), 405
+    return error_response("Method not allowed", "METHOD_NOT_ALLOWED", 405)
 
 
 @app.errorhandler(500)
 def internal_server_error(e):
-    return jsonify({"error": "Internal server error"}), 500
+    return error_response("Internal server error", "INTERNAL_ERROR", 500)
 
 
 @app.route("/api/patients/<int:patient_id>", methods=["DELETE"])
@@ -1076,7 +1262,7 @@ def delete_patient(patient_id):
             Patient.deleted_at == None,
         ).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
 
         audit(db, clinic_id=g.clinic_id, user_id=g.user_id, user_role=g.role,
               action_type=Actions.DELETE_PATIENT, entity_type="patient",
@@ -1090,7 +1276,7 @@ def delete_patient(patient_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1110,9 +1296,9 @@ def restore_patient(patient_id):
             Patient.clinic_id == g.clinic_id,
         ).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
         if patient.deleted_at is None:
-            return jsonify({"error": "Patient is not deleted"}), 400
+            return error_response("Patient is not deleted", "VALIDATION_ERROR", 400)
 
         patient.deleted_at = None
         patient.status = "Active"
@@ -1130,7 +1316,7 @@ def restore_patient(patient_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1172,13 +1358,13 @@ def create_message():
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({"error": "text is required"}), 400
+        return error_response("text is required", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
         clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
         if not clinic:
-            return jsonify({"error": "Clinic not found"}), 404
+            return error_response("Clinic not found", "NOT_FOUND", 404)
 
         message = Message(
             clinic_id=g.clinic_id,
@@ -1203,7 +1389,7 @@ def create_message():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1216,13 +1402,13 @@ def update_message_status(message_id):
     status = data.get("status")
 
     if status not in ("pending", "done"):
-        return jsonify({"error": "status must be 'pending' or 'done'"}), 400
+        return error_response("status must be 'pending' or 'done'", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
         msg = db.query(Message).filter_by(id=message_id, clinic_id=g.clinic_id).first()
         if not msg:
-            return jsonify({"error": "Message not found"}), 404
+            return error_response("Message not found", "NOT_FOUND", 404)
 
         msg.status = status
         db.commit()
@@ -1231,7 +1417,7 @@ def update_message_status(message_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1311,7 +1497,7 @@ def get_appointment(appointment_id):
             Appointment.clinic_id == g.clinic_id,
         ).first()
         if not appt:
-            return jsonify({"error": "Not found"}), 404
+            return error_response("Not found", "NOT_FOUND", 404)
 
         payload = serialize(appt)
         if appt.patient_id is not None:
@@ -1344,11 +1530,11 @@ def create_appointment():
     end_time     = data.get("end_time", "")
 
     if not patient_name:
-        return jsonify({"error": "patient_name is required"}), 400
+        return error_response("patient_name is required", "VALIDATION_ERROR", 400)
     if not date or not start_time or not end_time:
-        return jsonify({"error": "date, start_time, and end_time are required"}), 400
+        return error_response("date, start_time, and end_time are required", "VALIDATION_ERROR", 400)
     if start_time >= end_time:
-        return jsonify({"error": "start_time must be before end_time"}), 422
+        return error_response("start_time must be before end_time", "UNPROCESSABLE", 422)
 
     db = get_db()
     try:
@@ -1388,14 +1574,21 @@ def create_appointment():
                   metadata={"patient_name": patient_name, "date": date,
                             "start_time": start_time, "end_time": end_time})
 
-            notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
-                   title="New appointment",
-                   message=f"{patient_name} — {date} {start_time}–{end_time} (by {g.role})")
+            target = "secretary" if g.role == "doctor" else "doctor"
+            by = "Doctor" if g.role == "doctor" else "Secretary"
+            notif = notify(db, clinic_id=g.clinic_id, type="appointment", target_role=target,
+                           title="New appointment",
+                           message=f"{patient_name} — {date} {start_time}–{end_time} (by {by})",
+                           actor_role=g.role, actor_name=by)
             # Emit real-time notification
+            notif_id = notif.id if notif else None
             emit_to_clinic(g.clinic_id, "notification_new", {
+                "id": notif_id,
                 "type": "appointment",
                 "title": "New appointment",
-                "message": f"{patient_name} — {date} {start_time}–{end_time} (by {g.role})",
+                "message": f"{patient_name} — {date} {start_time}–{end_time} (by {by})",
+                "actor_role": g.role,
+                "actor_name": by,
                 "created_at": datetime.utcnow().isoformat(),
             })
             
@@ -1407,7 +1600,7 @@ def create_appointment():
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1425,7 +1618,7 @@ def update_appointment(appt_id):
     try:
         appt = db.query(Appointment).filter_by(id=appt_id, clinic_id=g.clinic_id).first()
         if not appt:
-            return jsonify({"error": "Appointment not found"}), 404
+            return error_response("Appointment not found", "NOT_FOUND", 404)
 
         # Determine new values (fall back to existing if not provided)
         new_date       = data.get("date") or data.get("appointment_date") or appt.date
@@ -1433,7 +1626,7 @@ def update_appointment(appt_id):
         new_end        = data.get("end_time",   appt.end_time)
 
         if new_start >= new_end:
-            return jsonify({"error": "start_time must be before end_time"}), 422
+            return error_response("start_time must be before end_time", "UNPROCESSABLE", 422)
 
         # Re-check conflicts only if time or date changed
         time_changed = (new_date != appt.date or new_start != appt.start_time or new_end != appt.end_time)
@@ -1461,14 +1654,21 @@ def update_appointment(appt_id):
               entity_id=appt.global_id or str(appt.id),
               metadata={"patient_name": appt.patient_name, "status": appt.status})
 
-        notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
-               title="Appointment updated",
-               message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status}")
+        target = "secretary" if g.role == "doctor" else "doctor"
+        by = "Doctor" if g.role == "doctor" else "Secretary"
+        notif = notify(db, clinic_id=g.clinic_id, type="appointment", target_role=target,
+                       title="Appointment updated",
+                       message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status} (by {by})",
+                       actor_role=g.role, actor_name=by)
         # Emit real-time notification
+        notif_id = notif.id if notif else None
         emit_to_clinic(g.clinic_id, "notification_new", {
+            "id": notif_id,
             "type": "appointment",
             "title": "Appointment updated",
-            "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status}",
+            "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} → {appt.status} (by {by})",
+            "actor_role": g.role,
+            "actor_name": by,
             "created_at": datetime.utcnow().isoformat(),
         })
 
@@ -1478,7 +1678,7 @@ def update_appointment(appt_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1495,7 +1695,7 @@ def delete_appointment(appt_id):
     try:
         appt = db.query(Appointment).filter_by(id=appt_id, clinic_id=g.clinic_id).first()
         if not appt:
-            return jsonify({"error": "Appointment not found"}), 404
+            return error_response("Appointment not found", "NOT_FOUND", 404)
 
         hard_delete = request.args.get("hard") == "1" and g.role == "doctor"
         if hard_delete:
@@ -1511,14 +1711,21 @@ def delete_appointment(appt_id):
                   action_type=Actions.CANCEL_APPOINTMENT, entity_type="appointment",
                   entity_id=appt.global_id or str(appt.id),
                   metadata={"patient_name": appt.patient_name})
-            notify(db, clinic_id=g.clinic_id, type="appointment", target_role="all",
-                   title="Appointment cancelled",
-                   message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time}")
+            target = "secretary" if g.role == "doctor" else "doctor"
+            by = "Doctor" if g.role == "doctor" else "Secretary"
+            notif = notify(db, clinic_id=g.clinic_id, type="appointment", target_role=target,
+                           title="Appointment cancelled",
+                           message=f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} (by {by})",
+                           actor_role=g.role, actor_name=by)
             # Emit real-time notification
+            notif_id = notif.id if notif else None
             emit_to_clinic(g.clinic_id, "notification_new", {
+                "id": notif_id,
                 "type": "appointment",
                 "title": "Appointment cancelled",
-                "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time}",
+                "message": f"{appt.patient_name} — {appt.date} {appt.start_time}–{appt.end_time} (by {by})",
+                "actor_role": g.role,
+                "actor_name": by,
                 "created_at": datetime.utcnow().isoformat(),
             })
 
@@ -1527,7 +1734,7 @@ def delete_appointment(appt_id):
 
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1613,13 +1820,13 @@ def mark_notification_read(notif_id):
     try:
         n = db.query(Notification).filter_by(id=notif_id, clinic_id=g.clinic_id).first()
         if not n:
-            return jsonify({"error": "Notification not found"}), 404
+            return error_response("Notification not found", "NOT_FOUND", 404)
         n.is_read = True
         db.commit()
         return jsonify({"success": True})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1639,7 +1846,7 @@ def mark_all_notifications_read():
         return jsonify({"success": True})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1723,7 +1930,7 @@ def seed_test_clinic():
     ONLY available when FLASK_ENV=test. Returns 404 in production.
     """
     if os.getenv("FLASK_ENV") != "test":
-        return jsonify({"error": "Not found"}), 404
+        return error_response("Not found", "NOT_FOUND", 404)
 
     data = request.get_json() or {}
     clinic_num = data.get("clinic_num", 0)
@@ -1754,7 +1961,7 @@ def seed_test_clinic():
         })
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1769,13 +1976,13 @@ ALLOWED_ATTACHMENT_TYPES = {"pdf", "png", "jpg", "jpeg", "gif", "webp"}
 def serve_cloud_attachment(clinic_id_param, filename):
     """Serve or redirect to a cloud attachment. Enforces clinic isolation."""
     if g.clinic_id != clinic_id_param:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
     url = storage.presigned_url(clinic_id_param, filename)
     # If local storage, serve the file directly; if S3, redirect to presigned URL
     if url.startswith("/api/"):
         data = storage.get(clinic_id_param, filename)
         if not data:
-            return jsonify({"error": "File not found"}), 404
+            return error_response("File not found", "NOT_FOUND", 404)
         return send_file(io.BytesIO(data), download_name=filename, as_attachment=False)
     from flask import redirect
     return redirect(url)
@@ -1787,22 +1994,22 @@ def serve_cloud_attachment(clinic_id_param, filename):
 def upload_cloud_attachment(clinic_id_param):
     """Upload an attachment to cloud storage. Enforces clinic isolation."""
     if g.clinic_id != clinic_id_param:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
 
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        return error_response("No file provided", "VALIDATION_ERROR", 400)
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        return error_response("No file selected", "VALIDATION_ERROR", 400)
 
     if request.content_length is not None and request.content_length > MAX_FILE_SIZE:
-        return jsonify({"error": "File too large (max 25MB)"}), 400
+        return error_response("File too large (max 25MB)", "VALIDATION_ERROR", 400)
 
     filename = secure_filename(file.filename)
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_ATTACHMENT_TYPES:
-        return jsonify({"error": f"File type not allowed. Allowed: {', '.join(ALLOWED_ATTACHMENT_TYPES)}"}), 400
+        return error_response(f"File type not allowed. Allowed: {', '.join(ALLOWED_ATTACHMENT_TYPES)}", "VALIDATION_ERROR", 400)
 
     # Prefix with patient global_id if provided to namespace files
     patient_global_id = request.form.get("patient_global_id", "")
@@ -1816,9 +2023,9 @@ def upload_cloud_attachment(clinic_id_param):
             file.content_type or "application/octet-stream"
         )
     except ValueError as err:
-        return jsonify({"error": str(err)}), 400
+        return error_response(str(err), "VALIDATION_ERROR", 400)
     except Exception as err:
-        return jsonify({"error": str(err)}), 500
+        return error_response(str(err), "INTERNAL_ERROR", 500)
 
     return jsonify({"success": True, "url": url, "filename": stored_name}), 201
 
@@ -1828,10 +2035,10 @@ def upload_cloud_attachment(clinic_id_param):
 def delete_cloud_attachment(clinic_id_param, filename):
     """Delete a cloud attachment. Enforces clinic isolation."""
     if g.clinic_id != clinic_id_param:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
     deleted = storage.delete(clinic_id_param, filename)
     if not deleted:
-        return jsonify({"error": "File not found"}), 404
+        return error_response("File not found", "NOT_FOUND", 404)
     return jsonify({"success": True})
 
 
@@ -1845,12 +2052,12 @@ def get_storage_usage(clinic_id_param):
     Both roles can check their own clinic's usage.
     """
     if g.clinic_id != clinic_id_param:
-        return jsonify({"error": "Forbidden"}), 403
+        return error_response("Forbidden", "FORBIDDEN", 403)
     try:
         usage = storage.get_usage(clinic_id_param)
         return jsonify(usage)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
 
 
 @app.route("/api/internal/sentry-test", methods=["POST"])
@@ -1864,7 +2071,7 @@ def sentry_test():
     Used during deployment verification — never expose in production.
     """
     if os.getenv("FLASK_ENV") != "test":
-        return jsonify({"error": "Not found"}), 404
+        return error_response("Not found", "NOT_FOUND", 404)
     raise RuntimeError("Sentry test error — triggered intentionally via /api/internal/sentry-test")
 
 
@@ -1883,7 +2090,7 @@ def get_my_clinic():
     try:
         clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
         if not clinic:
-            return jsonify({"error": "Clinic not found"}), 404
+            return error_response("Clinic not found", "NOT_FOUND", 404)
         doctor = db.query(User).filter_by(clinic_id=g.clinic_id, role="doctor").first()
         return jsonify({
             "clinic_id":   clinic.id,
@@ -1904,18 +2111,18 @@ def update_my_clinic():
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        return error_response("name is required", "VALIDATION_ERROR", 400)
     db = get_db()
     try:
         clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
         if not clinic:
-            return jsonify({"error": "Clinic not found"}), 404
+            return error_response("Clinic not found", "NOT_FOUND", 404)
         clinic.name = name
         db.commit()
         return jsonify({"success": True, "clinic_name": clinic.name})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -1935,14 +2142,14 @@ def ai_chat():
     """
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     if not GROQ_API_KEY:
-        return jsonify({"error": "AI features are not configured on this server. Set GROQ_API_KEY."}), 503
+        return error_response("AI features are not configured on this server. Set GROQ_API_KEY.", "SERVICE_UNAVAILABLE", 503)
 
     data    = request.get_json() or {}
     message = data.get("message", "").strip()
     patient = data.get("patient_context") or {}
 
     if not message:
-        return jsonify({"error": "message is required"}), 400
+        return error_response("message is required", "VALIDATION_ERROR", 400)
 
     try:
         from groq import Groq
@@ -1980,7 +2187,7 @@ Rules:
         return jsonify({"response": resp.choices[0].message.content})
 
     except Exception as e:
-        return jsonify({"error": f"AI request failed: {str(e)}"}), 500
+        return error_response(f"AI request failed: {str(e)}", "INTERNAL_ERROR", 500)
 
 
 # ── Medical Reference ─────────────────────────────────────────────────────────
@@ -1997,14 +2204,14 @@ def medical_reference():
     """
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     if not GROQ_API_KEY:
-        return jsonify({"error": "AI features are not configured on this server. Set GROQ_API_KEY."}), 503
+        return error_response("AI features are not configured on this server. Set GROQ_API_KEY.", "SERVICE_UNAVAILABLE", 503)
 
     data     = request.get_json() or {}
     question = data.get("question", "").strip()
     category = data.get("category", "General")
 
     if not question:
-        return jsonify({"error": "question is required"}), 400
+        return error_response("question is required", "VALIDATION_ERROR", 400)
 
     try:
         from groq import Groq
@@ -2033,7 +2240,7 @@ Rules:
         return jsonify({"success": True, "answer": resp.choices[0].message.content})
 
     except Exception as e:
-        return jsonify({"error": f"AI request failed: {str(e)}"}), 500
+        return error_response(f"AI request failed: {str(e)}", "INTERNAL_ERROR", 500)
 
 
 # ── Voice Transcription ───────────────────────────────────────────────────────
@@ -2050,20 +2257,20 @@ def transcribe_audio():
     """
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     if not GROQ_API_KEY:
-        return jsonify({"error": "Transcription not configured. Set GROQ_API_KEY."}), 503
+        return error_response("Transcription not configured. Set GROQ_API_KEY.", "SERVICE_UNAVAILABLE", 503)
 
     if "file" not in request.files:
-        return jsonify({"error": "No audio file provided"}), 400
+        return error_response("No audio file provided", "VALIDATION_ERROR", 400)
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        return error_response("No file selected", "VALIDATION_ERROR", 400)
 
     audio_data = file.read()
     if len(audio_data) > 25 * 1024 * 1024:
-        return jsonify({"error": "Audio file too large (max 25MB)"}), 400
+        return error_response("Audio file too large (max 25MB)", "VALIDATION_ERROR", 400)
     if len(audio_data) == 0:
-        return jsonify({"error": "Audio file is empty"}), 400
+        return error_response("Audio file is empty", "VALIDATION_ERROR", 400)
 
     filename = secure_filename(file.filename) or "audio.webm"
 
@@ -2079,7 +2286,7 @@ def transcribe_audio():
         return jsonify({"success": True, "text": transcription.text})
 
     except Exception as e:
-        return jsonify({"error": f"Transcription failed: {str(e)}"}), 500
+        return error_response(f"Transcription failed: {str(e)}", "INTERNAL_ERROR", 500)
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
@@ -2264,7 +2471,7 @@ def list_attachments(patient_id):
     try:
         patient = db.query(Patient).filter_by(id=patient_id, clinic_id=g.clinic_id).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
 
         files = storage.list_files(g.clinic_id)
         # Filter to files belonging to this patient (prefixed with patient_id)
@@ -2293,18 +2500,18 @@ def upload_attachment(patient_id):
     try:
         patient = db.query(Patient).filter_by(id=patient_id, clinic_id=g.clinic_id).first()
         if not patient:
-            return jsonify({"error": "Patient not found"}), 404
+            return error_response("Patient not found", "NOT_FOUND", 404)
 
         if "file" not in request.files:
-            return jsonify({"error": "No file provided"}), 400
+            return error_response("No file provided", "VALIDATION_ERROR", 400)
 
         file = request.files["file"]
         if not file.filename:
-            return jsonify({"error": "No file selected"}), 400
+            return error_response("No file selected", "VALIDATION_ERROR", 400)
 
         file_data = file.read()
         if len(file_data) > MAX_FILE_SIZE:
-            return jsonify({"error": f"File too large (max {MAX_FILE_SIZE // (1024*1024)}MB)"}), 400
+            return error_response(f"File too large (max {MAX_FILE_SIZE // (1024*1024)}MB)", "VALIDATION_ERROR", 400)
 
         filename = secure_filename(file.filename)
         # Prefix with patient_id so we can filter by patient later
@@ -2313,7 +2520,7 @@ def upload_attachment(patient_id):
         try:
             url = storage.save(g.clinic_id, stored_name, io.BytesIO(file_data), file.content_type or "application/octet-stream")
         except ValueError as ve:
-            return jsonify({"error": str(ve)}), 400
+            return error_response(str(ve), "VALIDATION_ERROR", 400)
 
         attachment = {
             "id":        stored_name,
@@ -2324,7 +2531,7 @@ def upload_attachment(patient_id):
         return jsonify({"success": True, "attachment": attachment}), 201
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -2336,7 +2543,7 @@ def delete_attachment(file_id):
     """DELETE /api/attachments/{file_id} — Delete an attachment."""
     deleted = storage.delete(g.clinic_id, file_id)
     if not deleted:
-        return jsonify({"error": "File not found"}), 404
+        return error_response("File not found", "NOT_FOUND", 404)
     return jsonify({"success": True})
 
 
@@ -2347,7 +2554,7 @@ def open_attachment(file_id):
     """GET /api/attachments/{file_id}/open — Download/view an attachment."""
     data = storage.get(g.clinic_id, file_id)
     if data is None:
-        return jsonify({"error": "File not found"}), 404
+        return error_response("File not found", "NOT_FOUND", 404)
     # Determine content type from extension
     ext = file_id.rsplit(".", 1)[-1].lower() if "." in file_id else ""
     content_types = {
@@ -2396,16 +2603,16 @@ def create_column():
     col_type = data.get("type", "text").strip()
 
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        return error_response("name is required", "VALIDATION_ERROR", 400)
     if col_type not in ("text", "number", "date", "boolean"):
-        return jsonify({"error": "type must be text, number, date, or boolean"}), 400
+        return error_response("type must be text, number, date, or boolean", "VALIDATION_ERROR", 400)
 
     db = get_db()
     try:
         from models import ClinicColumn
         existing = db.query(ClinicColumn).filter_by(clinic_id=g.clinic_id, column_name=name).first()
         if existing:
-            return jsonify({"error": f"Column '{name}' already exists"}), 409
+            return error_response(f"Column '{name}' already exists", "CONFLICT", 409)
 
         col = ClinicColumn(
             id=str(uuid.uuid4()),
@@ -2419,7 +2626,7 @@ def create_column():
         return jsonify({"success": True, "column": {"id": col.id, "column_name": col.column_name, "column_type": col.column_type, "is_default": False}}), 201
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -2435,13 +2642,13 @@ def delete_column(column_id):
         from models import ClinicColumn
         col = db.query(ClinicColumn).filter_by(id=column_id, clinic_id=g.clinic_id).first()
         if not col:
-            return jsonify({"error": "Column not found"}), 404
+            return error_response("Column not found", "NOT_FOUND", 404)
         db.delete(col)
         db.commit()
         return jsonify({"success": True})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 500
+        return error_response(str(e), "INTERNAL_ERROR", 500)
     finally:
         db.close()
 
@@ -2493,5 +2700,5 @@ if __name__ == "__main__":
     init_db()
     logger.info("[DB] Schema initialized")
     
-    # Start server
-    socketio.run(app, debug=True, host="0.0.0.0", port=8000)
+    # Start server (debug=False for production safety)
+    socketio.run(app, debug=False, host="0.0.0.0", port=8000)

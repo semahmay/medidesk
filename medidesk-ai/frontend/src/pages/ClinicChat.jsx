@@ -14,8 +14,8 @@ const ClinicChat = () => {
   const chatEndRef              = useRef(null);
   const lastMessageIdRef        = useRef(null);
 
-  const { clinicId, userRole } = getSession();
-  const { clearUnread, incrementUnread } = useUX();
+  const { userRole } = getSession();
+  const { clearUnread } = useUX();
 
   // Clear unread count when this page is open
   useEffect(() => {
@@ -131,7 +131,7 @@ const ClinicChat = () => {
             <div>
               <h1 style={s.headerTitle}>Clinic Chat</h1>
               <p style={s.headerSub}>
-                <span style={{ color: userRole === 'doctor' ? '#1D9E75' : '#3b82f6', fontWeight: 600 }}>
+                <span className="text-xs font-semibold" style={{ color: userRole === 'doctor' ? '#1D9E75' : '#3b82f6' }}>
                   {userRole === 'doctor' ? 'Doctor' : 'Secretary'}
                 </span>
               </p>
@@ -153,9 +153,9 @@ const ClinicChat = () => {
 
         {/* Send error */}
         {sendError && (
-          <div style={{ padding: '8px 24px', background: '#fee2e2', color: '#991b1b', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+          <div className="error-banner flex-row justify-between text-base" style={{ padding: '8px 24px', background: '#fee2e2', color: '#991b1b' }}>
             {sendError}
-            <button onClick={() => setSendError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 700 }}>×</button>
+            <button onClick={() => setSendError('')} className="error-dismiss-btn">×</button>
           </div>
         )}
 
@@ -175,14 +175,13 @@ const ClinicChat = () => {
               const isOwn  = msg.sender_role === userRole;
               const isDone = msg.status === 'done';
               return (
-                <div key={msg.id} style={{ ...s.msgRow, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                <div key={msg.id} className="flex-row gap-8 mb-8 w-full" style={{ justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
                   <div style={{ maxWidth: '65%' }}>
                     <div style={{ ...s.msgLabel, textAlign: isOwn ? 'right' : 'left' }}>
                       {msg.sender_role === 'doctor' ? 'Doctor' : 'Secretary'}
                     </div>
 
-                    <div style={{
-                      ...s.bubble,
+                    <div className="chat-bubble" style={{
                       background: isOwn ? (msg._optimistic ? '#4ade80' : '#1D9E75') : '#ffffff',
                       color: isOwn ? '#fff' : '#1a202c',
                       borderBottomRightRadius: isOwn ? 4 : 16,
@@ -220,7 +219,7 @@ const ClinicChat = () => {
                       )}
                     </div>
 
-                    <div style={{ ...s.msgTime, textAlign: isOwn ? 'right' : 'left' }}>
+                    <div className="chat-timestamp" style={{ textAlign: isOwn ? 'right' : 'left' }}>
                       {msg._optimistic ? 'Sending...' : formatTime(msg.created_at)}
                     </div>
                   </div>
@@ -257,7 +256,8 @@ const ClinicChat = () => {
           />
 
           <button
-            style={{ ...s.sendBtn, opacity: (!input.trim() || loading) ? 0.5 : 1 }}
+            className="flex-center rounded-lg cursor-pointer flex-shrink-0"
+            style={{ width: 40, height: 40, background: '#1D9E75', border: 'none', opacity: (!input.trim() || loading) ? 0.5 : 1 }}
             onClick={handleSend}
             disabled={!input.trim() || loading}
             title="Send (Enter)"

@@ -23,7 +23,7 @@ function timeAgo(ms) {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
-function StatusDot({ color }) {
+const StatusDot = React.memo(({ color }) => {
   return (
     <span style={{
       display: 'inline-block',
@@ -32,9 +32,9 @@ function StatusDot({ color }) {
       marginRight: 6, flexShrink: 0,
     }} />
   );
-}
+});
 
-function ErrorCodeBadge({ code }) {
+const ErrorCodeBadge = React.memo(({ code }) => {
   const map = {
     CONFLICT: { bg: '#fef2f2', color: '#991b1b', label: 'CONFLICT' },
     NETWORK:  { bg: '#fff7ed', color: '#9a3412', label: 'OFFLINE'  },
@@ -51,9 +51,9 @@ function ErrorCodeBadge({ code }) {
       {s.label}
     </span>
   );
-}
+});
 
-export default function SyncCenter({ onClose, onRetryError, onOpenConflict, lastSyncMs }) {
+const SyncCenter = ({ onClose, onRetryError, onOpenConflict, lastSyncMs }) => {
   const [pendingItems, setPendingItems]   = useState([]);
   const [failedErrors, setFailedErrors]   = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -246,7 +246,9 @@ export default function SyncCenter({ onClose, onRetryError, onOpenConflict, last
       </div>
     </div>
   );
-}
+};
+
+export default React.memo(SyncCenter);
 
 const styles = {
   overlay: {

@@ -133,6 +133,8 @@ class Notification(Base):
     clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
     # "doctor" | "secretary" | "all"
     target_role = Column(String, nullable=False, default="all")
+    actor_role = Column(String, nullable=True)       # who triggered this notification
+    actor_name = Column(String, nullable=True)       # display name of the actor
     type = Column(String, nullable=False)           # "appointment" | "patient" | "message" | "system"
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)

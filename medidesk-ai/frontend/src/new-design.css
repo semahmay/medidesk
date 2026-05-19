@@ -3115,3 +3115,385 @@ button[title*="Add Patient"]:hover {
   font-family: inherit;
   box-sizing: border-box;
 }
+
+/* ── Page transition animation ───────────────────────────────────────────── */
+.page-transition {
+  animation: pageFadeIn 0.25s ease;
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Skeleton shimmer loading ────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeletonShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-row {
+  display: flex; gap: 12px; padding: 12px 16px; align-items: center;
+}
+
+.skeleton-cell {
+  height: 14px; border-radius: 4px; background: #e2e8f0;
+}
+
+.skeleton-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #e2e8f0; flex-shrink: 0;
+}
+
+/* ── Table row hover ─────────────────────────────────────────────────────── */
+.patient-row {
+  transition: background 0.12s ease;
+}
+
+.patient-row:hover {
+  background: #f8fafc !important;
+}
+
+/* ── Modal backdrop blur ─────────────────────────────────────────────────── */
+.modal-backdrop {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Button hover/active states ──────────────────────────────────────────── */
+.btn-primary {
+  transition: background 0.2s, transform 0.12s, box-shadow 0.2s !important;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(29, 158, 117, 0.35) !important;
+}
+
+.btn-primary:active {
+  transform: scale(0.97) !important;
+}
+
+.btn-secondary {
+  transition: background 0.2s, transform 0.12s, border-color 0.2s !important;
+}
+
+.btn-secondary:hover {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.btn-secondary:active {
+  transform: scale(0.97) !important;
+}
+
+/* ── Consistent empty state ──────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.empty-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.empty-state-text {
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+/* ── Sidebar transition ──────────────────────────────────────────────────── */
+.sidebar-nav-item {
+  transition: background 0.15s, transform 0.1s !important;
+}
+
+.sidebar-nav-item:active {
+  transform: scale(0.92);
+}
+
+/* ── Notification card hover ─────────────────────────────────────────────── */
+.notification-card {
+  transition: background 0.15s;
+}
+
+.notification-card:hover {
+  background: #f1f5f9 !important;
+}
+
+/* ── Loading spinner / state ─────────────────────────────────────────────── */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #1D9E75;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Flex / Layout utilities ────────────────────────────────────────────── */
+.flex-row    { display: flex; }
+.flex-col    { display: flex; flex-direction: column; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-1      { flex: 1; }
+.flex-shrink-0 { flex-shrink: 0; }
+.gap-4  { gap: 4px; }
+.gap-6  { gap: 6px; }
+.gap-8  { gap: 8px; }
+.gap-10 { gap: 10px; }
+.gap-12 { gap: 12px; }
+.gap-16 { gap: 16px; }
+.items-center    { align-items: center; }
+.items-start     { align-items: flex-start; }
+.justify-between { justify-content: space-between; }
+.justify-center  { justify-content: center; }
+.justify-end     { justify-content: flex-end; }
+.text-center     { text-align: center; }
+.text-right      { text-align: right; }
+
+/* ── Spacing / Sizing ───────────────────────────────────────────────────── */
+.w-full  { width: 100%; }
+.h-full  { height: 100%; }
+.p-0  { padding: 0; }
+.p-4  { padding: 4px; }
+.p-8  { padding: 8px; }
+.p-10 { padding: 10px; }
+.p-12 { padding: 12px; }
+.p-16 { padding: 16px; }
+.p-20 { padding: 20px; }
+.m-0  { margin: 0; }
+.mt-4  { margin-top: 4px; }
+.mt-8  { margin-top: 8px; }
+.mt-10 { margin-top: 10px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mb-4  { margin-bottom: 4px; }
+.mb-8  { margin-bottom: 8px; }
+.mb-10 { margin-bottom: 10px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-16 { margin-bottom: 16px; }
+
+/* ── Typography utilities ────────────────────────────────────────────────── */
+.text-xs   { font-size: 11px; }
+.text-sm   { font-size: 12px; }
+.text-base { font-size: 13px; }
+.text-md   { font-size: 14px; }
+.text-lg   { font-size: 16px; }
+.text-xl   { font-size: 18px; }
+.text-2xl  { font-size: 22px; }
+.text-3xl  { font-size: 28px; }
+.font-normal  { font-weight: 400; }
+.font-medium  { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold    { font-weight: 700; }
+.text-slate   { color: #64748b; }
+.text-slate-light { color: #94a3b8; }
+.text-slate-dark  { color: #1e293b; }
+.text-teal    { color: #1D9E75; }
+.text-red     { color: #dc2626; }
+.text-blue    { color: #2563eb; }
+.text-purple  { color: #7c3aed; }
+.text-white   { color: #fff; }
+.text-uppercase { text-transform: uppercase; }
+.text-capitalize { text-transform: capitalize; }
+.leading-normal { line-height: 1.5; }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Colors / Backgrounds ────────────────────────────────────────────────── */
+.bg-white     { background: #fff; }
+.bg-slate-50  { background: #f8fafc; }
+.bg-slate-100 { background: #f1f5f9; }
+.bg-teal-50   { background: #f0fdf4; }
+.bg-blue-50   { background: #eff6ff; }
+.bg-purple-50 { background: #f5f3ff; }
+.bg-red-50    { background: #fef2f2; }
+
+/* ── Border / Radius ─────────────────────────────────────────────────────── */
+.rounded-sm  { border-radius: 4px; }
+.rounded     { border-radius: 6px; }
+.rounded-md  { border-radius: 8px; }
+.rounded-lg  { border-radius: 10px; }
+.rounded-xl  { border-radius: 12px; }
+.rounded-2xl { border-radius: 14px; }
+.rounded-full { border-radius: 50%; }
+.border        { border: 1px solid #e2e8f0; }
+.border-slate  { border: 1px solid #cbd5e1; }
+.border-b      { border-bottom: 1px solid #e2e8f0; }
+.border-t      { border-top: 1px solid #e2e8f0; }
+
+/* ── Cursor / Interaction ────────────────────────────────────────────────── */
+.cursor-pointer { cursor: pointer; }
+.select-none    { user-select: none; }
+.overflow-auto  { overflow: auto; }
+.overflow-hidden { overflow: hidden; }
+
+/* ── Overlay / Modal backdrop ────────────────────────────────────────────── */
+.overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.overlay-dark {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+
+/* ── Status badge ────────────────────────────────────────────────────────── */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+}
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%; display: inline-block;
+}
+
+/* ── Prescription / document styles ──────────────────────────────────────── */
+.prescription-modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 10000;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.prescription-modal {
+  background: #fff; border-radius: 12px; width: 500px; max-width: 100%;
+  max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.prescription-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #e2e8f0;
+}
+.prescription-modal-body {
+  flex: 1; overflow-y: auto; padding: 16px 20px;
+}
+.prescription-modal-footer {
+  display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  padding: 12px 20px; border-top: 1px solid #e2e8f0;
+}
+.prescription-print-btn {
+  padding: 8px 16px; background: #1D9E75; color: #fff;
+  border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.prescription-second-btn {
+  padding: 8px 16px; background: #f1f5f9; color: #1e293b;
+  border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+
+/* ── Card (for dashboard / metrics) ──────────────────────────────────────── */
+.card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* ── Grid layout ─────────────────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* ── Error message ───────────────────────────────────────────────────────── */
+.error-banner {
+  padding: 8px 12px; background: #fef2f2; color: #dc2626;
+  border-radius: 6px; font-size: 12px; margin-bottom: 8px;
+}
+.error-banner-actions {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.error-dismiss-btn {
+  background: none; border: 1px solid #fecaca; cursor: pointer;
+  color: #dc2626; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+}
+
+/* ── Appointment card ────────────────────────────────────────────────────── */
+.appointment-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.appointment-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.appointment-card-status {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600; text-transform: capitalize;
+}
+.appointment-actions {
+  display: flex; gap: 6px; margin-top: 8px;
+}
+
+/* ── Sync center ─────────────────────────────────────────────────────────── */
+.sync-status-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 6px; flex-shrink: 0;
+}
+
+/* ── Chat styles ─────────────────────────────────────────────────────────── */
+.chat-message-row {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.chat-bubble {
+  max-width: 75%; padding: 8px 12px; border-radius: 10px; font-size: 13px;
+  line-height: 1.5; word-break: break-word;
+}
+.chat-bubble-own {
+  background: #1D9E75; color: #fff; border-bottom-right-radius: 4px;
+}
+.chat-bubble-other {
+  background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px;
+}
+.chat-timestamp {
+  font-size: 10px; color: #94a3b8; margin-top: 4px;
+}
+.chat-input-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+  border-top: 1px solid #e2e8f0; background: #fff;
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+}
+.page-header h1 {
+  font-size: 20px; font-weight: 700; color: #1e293b; margin: 0;
+}
+.page-header p {
+  color: #64748b; margin: 0;
+}

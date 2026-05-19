@@ -1,5 +1,7 @@
 import React from 'react';
 
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 const WeekView = ({ selectedDate, appointments, onDateSelect }) => {
   const getWeekDates = (date) => {
     const week = [];
@@ -54,7 +56,6 @@ const WeekView = ({ selectedDate, appointments, onDateSelect }) => {
 
   const weekDates = getWeekDates(selectedDate);
   const timeSlots = generateTimeSlots();
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   return (
     <div className="week-view">
@@ -68,7 +69,7 @@ const WeekView = ({ selectedDate, appointments, onDateSelect }) => {
             onClick={() => onDateSelect(date)}
           >
             <div className="day-header">
-              <div className="day-name">{dayNames[index]}</div>
+              <div className="day-name">{DAY_NAMES[index]}</div>
               <div className="day-number">{date.getDate()}</div>
             </div>
           </div>
@@ -105,4 +106,4 @@ const WeekView = ({ selectedDate, appointments, onDateSelect }) => {
   );
 };
 
-export default WeekView;
+export default React.memo(WeekView);

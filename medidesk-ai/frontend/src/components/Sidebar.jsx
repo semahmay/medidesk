@@ -1,9 +1,25 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
 import '../new-design.css';
+
+const ROUTE_MAP = {
+  patients: '/',
+  appointments: '/appointments',
+  'medical-reference': '/medical-reference',
+  analytics: '/analytics',
+  'clinic-chat': '/clinic-chat',
+};
+
+const PAGE_FROM_PATH = {
+  '/': 'patients',
+  '/appointments': 'appointments',
+  '/clinic-chat': 'clinic-chat',
+  '/analytics': 'analytics',
+  '/medical-reference': 'medical-reference',
+};
 
 const Sidebar = ({ activePage }) => {
   const navigate  = useNavigate();
@@ -12,26 +28,11 @@ const Sidebar = ({ activePage }) => {
   const secretary = isSecretary(userRole);
   const { unreadChatCount } = useUX();
 
-  // Derive active page from route if not passed explicitly
-  const active = activePage || (
-    location.pathname === '/'             ? 'patients'
-    : location.pathname === '/appointments' ? 'appointments'
-    : location.pathname === '/clinic-chat'  ? 'clinic-chat'
-    : location.pathname === '/analytics'    ? 'analytics'
-    : location.pathname === '/medical-reference' ? 'medical-reference'
-    : ''
-  );
+  const active = activePage || PAGE_FROM_PATH[location.pathname] || '';
 
-  const handleNavClick = (page) => {
-    const routes = {
-      patients:          '/',
-      appointments:      '/appointments',
-      'medical-reference': '/medical-reference',
-      analytics:         '/analytics',
-      'clinic-chat':     '/clinic-chat',
-    };
-    if (routes[page]) navigate(routes[page]);
-  };
+  const handleNavClick = useCallback((page) => {
+    if (ROUTE_MAP[page]) navigate(ROUTE_MAP[page]);
+  }, [navigate]);
 
   return (
     <div className="sidebar">
@@ -148,4 +149,4 @@ const Sidebar = ({ activePage }) => {
   );
 };
 
-export default Sidebar;
+export default React.memo(Sidebar);

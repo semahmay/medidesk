@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import AppointmentCalendar from '../components/AppointmentCalendar';
@@ -76,14 +76,14 @@ const Appointments = ({ settings, currentUser }) => {
 
   const dateStr = () => selectedDate.toISOString().split('T')[0];
 
-  const reloadAll = () => {
+  const reloadAll = useCallback(() => {
     if (viewMode === 'week')       loadWeekAppts();
     else if (viewMode === 'month') loadMonthAppts();
     else                           loadDayAppts();
     loadStats();
-  };
+  }, [viewMode, loadDayAppts, loadWeekAppts, loadMonthAppts, loadStats]);
 
-  const loadDayAppts = async () => {
+  const loadDayAppts = useCallback(async () => {
     setLoadingAppts(true);
     try {
       const data = await fetchAppointments(secretary, { date: dateStr() });
@@ -94,9 +94,9 @@ const Appointments = ({ settings, currentUser }) => {
     } finally {
       setLoadingAppts(false);
     }
-  };
+  }, [secretary, selectedDate]);
 
-  const loadWeekAppts = async () => {
+  const loadWeekAppts = useCallback(async () => {
     setLoadingAppts(true);
     try {
       const data = await fetchWeekAppointments(secretary, dateStr());
@@ -107,9 +107,9 @@ const Appointments = ({ settings, currentUser }) => {
     } finally {
       setLoadingAppts(false);
     }
-  };
+  }, [secretary, selectedDate]);
 
-  const loadMonthAppts = async () => {
+  const loadMonthAppts = useCallback(async () => {
     setLoadingAppts(true);
     try {
       // Month: fetch the full month range
@@ -124,7 +124,7 @@ const Appointments = ({ settings, currentUser }) => {
     } finally {
       setLoadingAppts(false);
     }
-  };
+  }, [secretary, selectedDate]);
 
   const loadStats = async () => {
     try {
@@ -149,13 +149,13 @@ const Appointments = ({ settings, currentUser }) => {
     return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
   };
 
-  const handleAppointmentSave = () => {
+  const handleAppointmentSave = useCallback(() => {
     setShowModal(false);
     setEditingAppointment(null);
     reloadAll(); // auto-refresh immediately after save
-  };
+  }, [reloadAll]);
 
-  const handleStatusUpdate = async (appointmentId, newStatus) => {
+  const handleStatusUpdate = useCallback(async (appointmentId, newStatus) => {
     try {
       const appt = [...appointments, ...weekAppointments].find(a => a.id === appointmentId);
       await updateAppointment(secretary, appointmentId, { ...appt, status: newStatus });
@@ -163,13 +163,13 @@ const Appointments = ({ settings, currentUser }) => {
     } catch {
       setError('Failed to update appointment.');
     }
-  };
+  }, [appointments, weekAppointments, secretary, reloadAll]);
 
-  const handleDelete = async (appointmentId) => {
+  const handleDelete = useCallback(async (appointmentId) => {
     setDeleteConfirm(appointmentId);
-  };
+  }, []);
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     const id = deleteConfirm;
     setDeleteConfirm(null);
     try {
@@ -178,12 +178,12 @@ const Appointments = ({ settings, currentUser }) => {
     } catch {
       setError('Failed to delete appointment.');
     }
-  };
+  }, [deleteConfirm, secretary, reloadAll]);
 
-  const handleReschedule = (appointment) => {
+  const handleReschedule = useCallback((appointment) => {
     setEditingAppointment(appointment);
     setShowModal(true);
-  };
+  }, []);
 
   const formatWeekRange = () => {
     const { start, end } = getWeekRange(selectedDate);
@@ -197,7 +197,7 @@ const Appointments = ({ settings, currentUser }) => {
   return (
     <div className="app-container">
       <Sidebar activePage="appointments" />
-      <div className="main-content">
+      <div className="main-content page-transition">
         <TopBar settings={settings} currentUser={currentUser} />
         <div className="appointments-page">
 
@@ -230,15 +230,14 @@ const Appointments = ({ settings, currentUser }) => {
                     >
                       <div className="appointment-time">{appt.start_time} – {appt.end_time}</div>
                       <div className="appointment-patient">{appt.patient_name}</div>
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-                          background: s.border, color: s.color, textTransform: 'uppercase',
+                      <div className="mt-4">
+                        <span className="status-badge text-uppercase" style={{
+                          background: s.border, color: s.color,
                         }}>
                           {appt.status}
                         </span>
                       </div>
-                      <div className="appointment-actions" style={{ marginTop: 8 }}>
+                      <div className="appointment-actions">
                         {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                           <button
                             className="action-btn confirm-btn"
@@ -270,14 +269,12 @@ const Appointments = ({ settings, currentUser }) => {
           {/* ── Right column ── */}
           <div className="appointments-main">
             {error && (
-              <div style={{
-                padding: '8px 16px', background: '#fee2e2', color: '#991b1b',
-                borderRadius: 6, marginBottom: 12, fontSize: 13,
-              }}>
+              <div className="error-banner">
                 {error}
                 <button
                   onClick={() => setError('')}
-                  style={{ marginLeft: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 700 }}
+                  className="error-dismiss-btn"
+                  style={{ marginLeft: 12 }}
                 >
                   ×
                 </button>
@@ -319,9 +316,9 @@ const Appointments = ({ settings, currentUser }) => {
             </div>
 
             {loadingAppts ? (
-              <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-                <div style={{ width: 28, height: 28, border: '3px solid #e2e8f0', borderTop: '3px solid #1D9E75', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 10px' }} />
-                Loading...
+              <div className="loading-state">
+                <div className="loading-spinner" />
+                <span>Loading appointments...</span>
               </div>
             ) : (
               <>

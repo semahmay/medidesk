@@ -2,6 +2,21 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import cloudApi from '../cloudApi';
 import NotesEditor from './NotesEditor';
 
+const SortIcon = React.memo(({ col, sortKey, sortDir }) => {
+  if (sortKey !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>;
+  return <span style={{ marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+});
+
+const STATUS_OPTIONS = ['scheduled', 'arrived', 'in_consultation', 'completed', 'Active', 'Follow-up', 'Urgent', 'Closed'];
+
+const DEFAULT_COLUMNS = [
+  { key: 'full_name',   label: 'Name',        sortable: true,  width: '20%' },
+  { key: 'phone',       label: 'Phone',        sortable: false, width: '15%' },
+  { key: 'appointment', label: 'Appointment',  sortable: true,  width: '18%' },
+  { key: 'status',      label: 'Status',       sortable: true,  width: '12%' },
+  { key: 'notes',       label: 'Notes',        sortable: false, width: '25%' },
+];
+
 const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, onPatientSelect, onEditPatient, onDeletePatient, onColumnsChange, fetchPatients }) => {
   const [columns, setColumns] = useState([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
@@ -61,11 +76,6 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
     });
   }, [patients, sortKey, sortDir]);
 
-  const SortIcon = ({ col }) => {
-    if (sortKey !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>;
-    return <span style={{ marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
-  };
-
   const handleNotesEditorClose = () => {
     setNotesEditorPatient(null);
   };
@@ -79,30 +89,10 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
     }
   };
 
-  const statusOptions = ['scheduled', 'arrived', 'in_consultation', 'completed', 'Active', 'Follow-up', 'Urgent', 'Closed'];
-  
-  const getStatusClass = (status) => {
-    switch (status.toLowerCase()) {
-      case 'active': return 'status-active';
-      case 'follow-up': return 'status-followup';
-      case 'urgent': return 'status-urgent';
-      case 'closed': return 'status-closed';
-      default: return 'status-active';
-    }
-  };
-
   const truncateText = (text, maxLength = 50) => {
     if (!text) return '-';
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
-
-  const defaultColumns = [
-    { key: 'full_name',   label: 'Name',        sortable: true,  width: '20%' },
-    { key: 'phone',       label: 'Phone',        sortable: false, width: '15%' },
-    { key: 'appointment', label: 'Appointment',  sortable: true,  width: '18%' },
-    { key: 'status',      label: 'Status',       sortable: true,  width: '12%' },
-    { key: 'notes',       label: 'Notes',        sortable: false, width: '25%' },
-  ];
 
   const customColumns = columns.filter(col => !col.is_default);
 
@@ -111,21 +101,21 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
       <table className="patient-table">
         <thead>
           <tr>
-            {defaultColumns.map(col => (
+            {DEFAULT_COLUMNS.map(col => (
               <th
                 key={col.key}
                 onClick={col.sortable ? () => handleSort(col.key) : undefined}
                 style={col.sortable ? { cursor: 'pointer', userSelect: 'none' } : {}}
                 title={col.sortable ? `Sort by ${col.label}` : undefined}
               >
-                {col.label}{col.sortable && <SortIcon col={col.key} />}
+                {col.label}{col.sortable && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}
               </th>
             ))}
             {customColumns.map(col => (
-              <th key={col.id} className="custom-column-header">
+              <th key={col.id} style={{ position: 'relative', paddingRight: 30 }}>
                 {col.column_name}
-                <button 
-                  className="column-delete-btn"
+                <button
+                  style={s.delColBtn}
                   onClick={() => handleDeleteColumn(col.id)}
                   title="Delete column"
                 >
@@ -135,8 +125,8 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
             ))}
             <th>
               Actions
-              <button 
-                className="add-column-btn"
+              <button
+                style={s.addColBtn}
                 onClick={() => setShowAddColumnModal(true)}
                 title="Add custom column"
               >
@@ -180,7 +170,7 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
                     }
                   }}
                 >
-                  {statusOptions.map(s => (
+                  {STATUS_OPTIONS.map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -280,19 +270,28 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
   };
 
   return (
-    <div className="pf-overlay">
-      <div className="pf-modal">
-        <div className="pf-header">
-          <h2>Add Custom Column</h2>
-          <button className="pf-close-btn" onClick={onClose}>×</button>
+    <div style={addS.backdrop} onClick={onClose}>
+      <div style={addS.modal} onClick={e => e.stopPropagation()}>
+        <div style={addS.header}>
+          <div style={addS.headerIcon}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </div>
+          <div>
+            <h2 style={addS.title}>Add Custom Column</h2>
+            <p style={addS.subtitle}>Add a new custom field to patient records</p>
+          </div>
+          <button style={addS.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="pf-body">
-          <div className="pf-group">
-            <label className="pf-label">Column Name *</label>
+        <form onSubmit={handleSubmit} style={addS.body}>
+          <div style={addS.fieldGroup}>
+            <label style={addS.label}>Column Name *</label>
             <input
               type="text"
-              className="pf-input"
+              style={addS.input}
               value={columnName}
               onChange={(e) => {
                 setColumnName(e.target.value);
@@ -304,10 +303,10 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
             />
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Field Type</label>
+          <div style={addS.fieldGroup}>
+            <label style={addS.label}>Field Type</label>
             <select
-              className="pf-select"
+              style={addS.input}
               value={columnType}
               onChange={(e) => setColumnType(e.target.value)}
             >
@@ -319,22 +318,22 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
           </div>
 
           {error && (
-            <div className="pf-error">
+            <div style={addS.errorBox}>
               {error}
             </div>
           )}
 
-          <div className="pf-actions">
-            <button
-              type="button"
-              className="pf-btn-cancel"
-              onClick={onClose}
-            >
+          <div style={addS.footer}>
+            <button type="button" style={addS.btnSecondary} onClick={onClose}>
               Cancel
             </button>
             <button
               type="submit"
-              className="pf-btn-primary"
+              style={{
+                ...addS.btnPrimary,
+                opacity: loading || !columnName.trim() ? 0.6 : 1,
+                cursor: loading || !columnName.trim() ? 'not-allowed' : 'pointer',
+              }}
               disabled={loading || !columnName.trim()}
             >
               {loading ? 'Adding...' : 'Add Column'}
@@ -344,6 +343,101 @@ const AddColumnModal = ({ onClose, onColumnAdded }) => {
       </div>
     </div>
   );
+};
+
+const s = {
+  addColBtn: {
+    background: '#1D9E75',
+    color: 'white',
+    border: 'none',
+    borderRadius: 6,
+    width: 22,
+    height: 22,
+    fontSize: 16,
+    fontWeight: 700,
+    lineHeight: 1,
+    cursor: 'pointer',
+    marginLeft: 8,
+    verticalAlign: 'middle',
+    transition: 'all 0.2s',
+  },
+  delColBtn: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: '#dc2626',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: 18,
+    height: 18,
+    fontSize: 12,
+    lineHeight: 1,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+    padding: 0,
+  },
+};
+
+const addS = {
+  backdrop: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+  },
+  modal: {
+    background: '#fff', borderRadius: 14, width: 420,
+    maxHeight: '85vh', overflowY: 'auto',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px',
+    background: '#f8fafb', borderBottom: '1px solid #e2e8f0',
+    position: 'sticky', top: 0, zIndex: 1,
+  },
+  headerIcon: {
+    width: 34, height: 34, borderRadius: 8, background: '#1D9E75',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  title:    { margin: 0, fontSize: 15, fontWeight: 700, color: '#1a202c' },
+  subtitle: { margin: 0, fontSize: 12, color: '#64748b' },
+  closeBtn: {
+    marginLeft: 'auto', background: 'none', border: 'none',
+    fontSize: 16, color: '#94a3b8', cursor: 'pointer', padding: '4px 6px',
+  },
+  body:      { padding: '20px' },
+  fieldGroup: { marginBottom: 16 },
+  label: {
+    display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
+  },
+  input: {
+    width: '100%', height: 40, border: '1px solid #e2e8f0', borderRadius: 8,
+    padding: '0 12px', fontSize: 14, outline: 'none', background: '#fff',
+    fontFamily: 'inherit', transition: 'all 0.2s ease',
+  },
+  errorBox: {
+    background: '#fef2f2', border: '1px solid #fecaca',
+    borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#dc2626', marginBottom: 12,
+  },
+  footer: {
+    display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end',
+    paddingTop: 14, borderTop: '1px solid #e2e8f0', marginTop: 20,
+  },
+  btnSecondary: {
+    padding: '8px 18px', border: '1px solid #e2e8f0', borderRadius: 8,
+    background: '#fff', color: '#64748b', fontSize: 14, fontWeight: 500,
+    cursor: 'pointer', transition: 'all 0.2s',
+  },
+  btnPrimary: {
+    padding: '8px 20px', border: 'none', borderRadius: 8,
+    background: '#1D9E75', color: '#fff', fontSize: 14, fontWeight: 600,
+    boxShadow: '0 2px 8px rgba(29,158,117,0.3)',
+    transition: 'all 0.2s',
+  },
 };
 
 export default PatientTable;

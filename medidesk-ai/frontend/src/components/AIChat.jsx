@@ -2,6 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 import cloudApi from '../cloudApi';
 
+const QUICK_ACTIONS = [
+  { label: 'Summarize case',    prompt: 'Give me a brief 3 sentence summary of this patient.' },
+  { label: 'Next steps',        prompt: 'What are the recommended next steps for this patient? Keep it brief.' },
+  { label: 'Risks',             prompt: 'What are the main risks to watch for with this patient? List max 3.' },
+  { label: 'Drug interactions', prompt: 'Are there any drug interactions I should know about for this patient?' },
+];
+
 const AIChat = ({ patient }) => {
   // Key by global_id (stable across sync) → fall back to local id for legacy records
   const storageKey = patient
@@ -28,13 +35,6 @@ const AIChat = ({ patient }) => {
   useEffect(() => {
     if (storageKey) localStorage.setItem(storageKey, JSON.stringify(messages));
   }, [messages, storageKey]);
-
-  const quickActions = [
-    { label: 'Summarize case',    prompt: 'Give me a brief 3 sentence summary of this patient.' },
-    { label: 'Next steps',        prompt: 'What are the recommended next steps for this patient? Keep it brief.' },
-    { label: 'Risks',             prompt: 'What are the main risks to watch for with this patient? List max 3.' },
-    { label: 'Drug interactions', prompt: 'Are there any drug interactions I should know about for this patient?' },
-  ];
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -92,7 +92,7 @@ const AIChat = ({ patient }) => {
 
       <div className="chat-messages" ref={chatContainerRef}>
         <div className="quick-actions">
-          {quickActions.map((action, index) => (
+          {QUICK_ACTIONS.map((action, index) => (
             <button
               key={index}
               className="quick-action-btn"

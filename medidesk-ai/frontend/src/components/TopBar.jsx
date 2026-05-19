@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import cloudApi, { onRealtimeEvent } from '../cloudApi';
 import ClinicModal from './ClinicModal';
+import NotificationCenter from './NotificationCenter';
+import NotificationToast, { showNotificationToast } from './NotificationToast';
+import { useNotificationSound } from '../hooks/useNotificationSound';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { getQueueCount, subscribeSyncQueueUpdates } from '../services/patientSyncService';
@@ -27,6 +30,17 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
   const { userRole } = getSession();
   const secretary = isSecretary(userRole);
   const { setShowSyncCenter } = useUX();
+  const { enabled: soundEnabled, toggleSound, playSound } = useNotificationSound();
+
+  const fetchNotifs = useCallback(async () => {
+    try {
+      const res = await cloudApi.get('/notifications');
+      setNotifications(res.data.notifications || []);
+      setUnreadCount(res.data.unread_count || 0);
+    } catch {
+      // non-critical
+    }
+  }, []);
 
   useEffect(() => {
     // Load app version from Electron
@@ -45,7 +59,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
       .then(res => {
         if (res.data) setClinicInfo({ doctor_name: res.data.doctor_name, clinic_name: res.data.clinic_name });
       })
-      .catch(() => {}); // silently skip — local backend not running in cloud-only mode
+      .catch(() => {});
 
     const refreshCounts = async () => {
       const [count, errors] = await Promise.all([
@@ -54,16 +68,6 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
       ]);
       setPendingSync(count);
       setFailedSyncCount(errors.filter(e => !e.resolved).length);
-    };
-
-    const fetchNotifs = async () => {
-      try {
-        const res = await cloudApi.get('/notifications');
-        setNotifications(res.data.notifications || []);
-        setUnreadCount(res.data.unread_count || 0);
-      } catch {
-        // non-critical
-      }
     };
 
     refreshCounts();
@@ -76,25 +80,39 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     const unsubErrors = subscribeSyncErrorChanges(refreshCounts);
 
     const unsubNotification = onRealtimeEvent('notification_new', (payload) => {
-      setNotifications(prev => [{
+      const notif = {
         id: payload.id,
         type: payload.type,
         title: payload.title,
         message: payload.message,
         created_at: payload.created_at,
+        actor_role: payload.actor_role,
+        actor_name: payload.actor_name,
         is_read: false,
-      }, ...prev]);
+      };
+      setNotifications(prev => [notif, ...prev]);
       setUnreadCount(prev => prev + 1);
+
+      // Show toast
+      showNotificationToast(notif);
+
+      // Play sound for notifications from other users
+      if (payload.actor_role && payload.actor_role !== userRole) {
+        const soundType = payload.type === 'appointment'
+          ? `appointment_${payload.title?.toLowerCase().includes('updated') ? 'updated' : payload.title?.toLowerCase().includes('cancelled') ? 'cancelled' : 'created'}`
+          : payload.type;
+        playSound(soundType);
+      }
     });
 
     const unsubMessage = onRealtimeEvent('message_new', (payload) => {
       if (!window.location.hash.includes('clinic-chat')) {
-        // Only increment when user is not already on the chat page.
         if (lastMsgIdRef.current && payload.id !== lastMsgIdRef.current) {
           setUnreadCount(prev => prev + 1);
         }
       }
       lastMsgIdRef.current = payload.id;
+      playSound('message');
     });
 
     return () => {
@@ -104,7 +122,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
       unsubNotification?.();
       unsubMessage?.();
     };
-  }, [currentUser?.googleId]);
+  }, [currentUser?.googleId, userRole, playSound, fetchNotifs]);
 
   // Close notification panel on outside click
   useEffect(() => {
@@ -131,43 +149,43 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  const handleLanguageToggle = (lang) => {
+  const handleLanguageToggle = useCallback((lang) => {
     setLanguage(lang);
     if (onLanguageChange) onLanguageChange(lang);
-  };
+  }, [onLanguageChange]);
 
   const handleAvatarClick = (e) => {
     e.stopPropagation();
     setShowUserMenu(v => !v);
   };
 
-  const handleNotifBellClick = (e) => {
+  const handleNotifBellClick = useCallback((e) => {
     e.stopPropagation();
     setShowNotifPanel(v => !v);
-  };
+  }, []);
 
-  const handleMarkRead = async (id) => {
+  const handleMarkRead = useCallback(async (id) => {
     try {
       await cloudApi.patch(`/notifications/${id}/read`);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch { /* non-critical */ }
-  };
+  }, []);
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
     try {
       await cloudApi.patch('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch { /* non-critical */ }
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setShowUserMenu(false);
     if (window.electronAPI?.logout) {
       await window.electronAPI.logout();
     }
-  };
+  }, []);
 
   const getDoctorInitials = () => {
     const name = currentUser?.name || settings?.doctor_name;
@@ -175,26 +193,9 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
     return 'DR';
   };
 
-  const fmtNotifTime = (iso) => {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch { return ''; }
-  };
-
-  const notifTypeIcon = (type) => {
-    const icons = {
-      appointment: '📅',
-      patient:     '👤',
-      message:     '💬',
-      system:      '⚙️',
-    };
-    return icons[type] || '🔔';
-  };
-
   return (
     <>
+    <NotificationToast />
     <div className="topbar">
       <div className="topbar-left">
         <h1 className="topbar-title">MediDesk AI</h1>
@@ -211,7 +212,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
       </div>
 
       <div className="topbar-right">
-        {/* ── Sync Center button — shows failed/pending badge ── */}
+        {/* ── Sync Center button ── */}
         <button
           id="sync-center-btn"
           onClick={() => setShowSyncCenter(true)}
@@ -266,6 +267,7 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
               position: 'relative', background: 'none', border: 'none',
               cursor: 'pointer', padding: '4px 6px', borderRadius: 8,
               color: '#64748b', display: 'flex', alignItems: 'center',
+              transition: 'all 0.15s',
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -275,11 +277,11 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
             {unreadCount > 0 && (
               <span style={{
                 position: 'absolute', top: 0, right: 0,
-                width: 16, height: 16, borderRadius: '50%',
+                minWidth: 16, height: 16, borderRadius: '50%',
                 background: '#ef4444', color: '#fff',
                 fontSize: 9, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                lineHeight: 1,
+                lineHeight: 1, padding: '0 3px',
               }}>
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
@@ -287,63 +289,15 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
           </button>
 
           {showNotifPanel && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-              width: 320, maxHeight: 400, overflowY: 'auto',
-              background: '#fff', border: '1px solid #e2e8f0',
-              borderRadius: 12, boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-              zIndex: 1000,
-            }}>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '12px 16px', borderBottom: '1px solid #f1f5f9',
-              }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>
-                  Notifications {unreadCount > 0 && <span style={{ color: '#ef4444' }}>({unreadCount})</span>}
-                </span>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllRead}
-                    style={{ background: 'none', border: 'none', fontSize: 11, color: '#1D9E75', cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    Mark all read
-                  </button>
-                )}
-              </div>
-
-              {notifications.length === 0 ? (
-                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                  No notifications yet
-                </div>
-              ) : (
-                notifications.map(n => (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.is_read && handleMarkRead(n.id)}
-                    style={{
-                      padding: '10px 16px',
-                      borderBottom: '1px solid #f8fafc',
-                      background: n.is_read ? '#fff' : '#f0fdf4',
-                      cursor: n.is_read ? 'default' : 'pointer',
-                      display: 'flex', gap: 10, alignItems: 'flex-start',
-                    }}
-                  >
-                    <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{notifTypeIcon(n.type)}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: n.is_read ? 500 : 700, color: '#1e293b', marginBottom: 2 }}>
-                        {n.title}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.4, wordBreak: 'break-word' }}>
-                        {n.message}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0, marginTop: 2 }}>
-                      {fmtNotifTime(n.created_at)}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <NotificationCenter
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
+              onClose={() => setShowNotifPanel(false)}
+              soundEnabled={soundEnabled}
+              onToggleSound={toggleSound}
+            />
           )}
         </div>
 
@@ -416,4 +370,4 @@ const TopBar = ({ settings, currentUser, onLanguageChange }) => {
   );
 };
 
-export default TopBar;
+export default React.memo(TopBar);

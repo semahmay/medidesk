@@ -315,37 +315,25 @@ const s = {
     borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
     transition: 'background 0.2s, transform 0.1s',
   },
-addForm: {
+  addForm: {
     display: 'flex', flexDirection: 'column', gap: 10,
     background: '#f1f5f9', border: '1px solid #e2e8f0',
     borderRadius: 12, padding: '16px', marginBottom: 14,
     boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
   },
   addInput: {
-    height: 40, border: '1px solid #cbd5e1', borderRadius: 8,
-    padding: '0 12px', fontSize: 14, outline: 'none', background: '#fff',
+    height: 38, border: '1px solid #e2e8f0', borderRadius: 8,
+    padding: '0 12px', fontSize: 13, outline: 'none', background: '#fff',
     transition: 'all 0.2s ease',
   },
   addError: {
     fontSize: 12, color: '#dc2626', background: '#fef2f2',
-    border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px',
+    border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px',
   },
   addSubmitBtn: {
-    height: 40, background: '#1D9E75', color: '#fff',
-    border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',
-    marginTop: 4, transition: 'background 0.2s, transform 0.1s',
-  },
-  addInput: {
-    height: 36, border: '1px solid #e2e8f0', borderRadius: 6,
-    padding: '0 10px', fontSize: 13, outline: 'none', background: '#fff',
-  },
-  addError: {
-    fontSize: 12, color: '#dc2626', background: '#fef2f2',
-    border: '1px solid #fecaca', borderRadius: 6, padding: '6px 10px',
-  },
-  addSubmitBtn: {
-    height: 36, background: '#1D9E75', color: '#fff',
-    border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    height: 38, background: '#1D9E75', color: '#fff',
+    border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    transition: 'background 0.2s, transform 0.1s',
   },
   staffList: { display: 'flex', flexDirection: 'column', gap: 8 },
   staffRow: {

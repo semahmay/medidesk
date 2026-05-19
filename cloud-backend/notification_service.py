@@ -28,6 +28,8 @@ def notify(
     title: str,
     message: str,
     target_role: str = "all",
+    actor_role: str = None,
+    actor_name: str = None,
 ):
     """
     Create a notification. Never raises.
@@ -40,10 +42,15 @@ def notify(
             title       = title,
             message     = message,
             target_role = target_role,
+            actor_role  = actor_role,
+            actor_name  = actor_name,
             is_read     = False,
             created_at  = datetime.utcnow(),
         )
         db.add(n)
+        db.flush()
         logger.info(f"[NOTIFY] {type} → {target_role} | clinic={clinic_id} | {title}")
+        return n
     except Exception as exc:
         logger.error(f"[NOTIFY] Failed to create notification: {exc}")
+        return None

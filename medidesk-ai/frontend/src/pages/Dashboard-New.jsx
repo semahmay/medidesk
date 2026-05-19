@@ -136,7 +136,7 @@ const Dashboard = ({ settings, currentUser }) => {
     }
   }, [debouncedSearch, page]);
 
-  const fetchPatients = async () => {
+  const fetchPatients = useCallback(async () => {
     try {
       // Both roles: cloud is the single source of truth
       const cloud = await fetchCloudPatients(page, 50, debouncedSearch);
@@ -167,9 +167,9 @@ const Dashboard = ({ settings, currentUser }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, debouncedSearch, secretary, clinicId]);
 
-  const fetchColumns = async () => {
+  const fetchColumns = useCallback(async () => {
     // Custom columns are stored in cloud — skip for secretary (no column management)
     if (secretary) return;
     try {
@@ -178,7 +178,7 @@ const Dashboard = ({ settings, currentUser }) => {
     } catch (error) {
       // Silently skip if not available
     }
-  };
+  }, [secretary]);
 
   const handlePatientSelect = async (patient) => {
     // Cloud is the only source — use the patient data directly
@@ -260,7 +260,7 @@ const Dashboard = ({ settings, currentUser }) => {
     setShowPatientForm(true);
   };
 
-  const handleDeletePatient = async (patientId) => {
+  const handleDeletePatient = useCallback(async (patientId) => {
     if (window.confirm('Are you sure you want to delete this patient?')) {
       const patient = patients.find(p => p.id === patientId || p.global_id === patientId);
       try {
@@ -274,25 +274,31 @@ const Dashboard = ({ settings, currentUser }) => {
         showToast('Failed to delete patient.', 'error', 4000);
       }
     }
-  };
+  }, [patients, selectedPatient, showToast]);
 
   const handlePatientFormClose = () => {
     setShowPatientForm(false);
     setEditingPatient(null);
   };
 
-  const handlePatientSaved = () => {
+  const handlePatientSaved = useCallback((result, dupPatient) => {
+    if (dupPatient) {
+      // Duplicate was selected — navigate to existing patient
+      handlePatientFormClose();
+      handlePatientSelect(dupPatient);
+      return;
+    }
     fetchPatients();
     handlePatientFormClose();
-  };
+  }, [fetchPatients, handlePatientFormClose, handlePatientSelect]);
 
-  const handleColumnsChange = () => {
+  const handleColumnsChange = useCallback(() => {
     fetchColumns();
     fetchPatients();
     if (selectedPatient) {
       handlePatientSelect(selectedPatient);
     }
-  };
+  }, [fetchColumns, fetchPatients, selectedPatient, handlePatientSelect]);
 
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
@@ -340,7 +346,7 @@ const Dashboard = ({ settings, currentUser }) => {
       <Sidebar activePage="patients" />
 
       {/* Main Content */}
-      <div className="main-content">
+      <div className="main-content page-transition">
         {/* Top Bar */}
         <TopBar settings={settings} currentUser={currentUser} onLanguageChange={handleLanguageChange} />
 

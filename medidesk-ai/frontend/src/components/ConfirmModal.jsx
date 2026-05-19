@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 /**
  * ConfirmModal — replaces window.confirm() everywhere.
@@ -83,4 +83,4 @@ const s = {
   },
 };
 
-export default ConfirmModal;
+export default React.memo(ConfirmModal);

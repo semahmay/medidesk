@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import cloudApi from '../cloudApi';
 import VoiceRecorder from './VoiceRecorder';
 import ConfirmModal from './ConfirmModal';
+import DuplicateCheckModal from './DuplicateCheckModal';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
@@ -14,16 +15,23 @@ const PatientForm = ({ patient, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     full_name: '', phone: '', email: '', appointment: '', status: 'Active', notes: ''
   });
-  const [quickMode, setQuickMode] = useState(false); // Skip notes for fast intake
+  const [quickMode, setQuickMode] = useState(false);
   const [customFields, setCustomFields] = useState({});
   const [columns, setColumns]           = useState([]);
   const [loading, setLoading]           = useState(false);
-  const [existingPatients, setExistingPatients] = useState([]);
   const [isDirty, setIsDirty]           = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [conflictModal, setConflictModal] = useState(false); // inline conflict UI
+  const [conflictModal, setConflictModal] = useState(false);
   const initialDataRef = useRef(null);
   const { showToast, reportSyncIssue } = useUX();
+
+  // ── Smart Duplicate Detection ───────────────────────────────────────────────
+  const [possibleDuplicates, setPossibleDuplicates] = useState([]);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateChecking, setDuplicateChecking] = useState(false);
+  const [duplicatesFound, setDuplicatesFound] = useState(false);
+  const debounceTimer = useRef(null);
+  const pendingSubmitRef = useRef(null);
 
   const handleTranscriptionComplete = (transcription) => {
     setFormData(prev => ({ ...prev, notes: prev.notes ? `${prev.notes}\n\n${transcription}` : transcription }));
@@ -31,11 +39,47 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 
   useEffect(() => {
     fetchColumns();
-    // Load existing patients for duplicate detection (only when adding new)
-    if (!patient) {
-      cloudApi.get('/patients').then(r => setExistingPatients(r.data.patients || [])).catch(() => {});
+  }, []);
+
+  // ── Duplicate detection: debounced check on name/phone change ──────────────
+  const checkDuplicates = useCallback(async (name, phone) => {
+    if (!name && !phone) {
+      setPossibleDuplicates([]);
+      setDuplicatesFound(false);
+      return;
+    }
+    setDuplicateChecking(true);
+    try {
+      const res = await cloudApi.get(`/patients/duplicates`, {
+        params: { name, phone },
+      });
+      const dups = res.data.duplicates || [];
+      setPossibleDuplicates(dups);
+      setDuplicatesFound(dups.length > 0);
+    } catch {
+      // Non-critical — silently skip
+    } finally {
+      setDuplicateChecking(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (patient) return; // Only check for new patients
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    const name = formData.full_name.trim();
+    const phone = formData.phone.trim();
+    if (!name && !phone) {
+      setDuplicatesFound(false);
+      setPossibleDuplicates([]);
+      return;
+    }
+    debounceTimer.current = setTimeout(() => {
+      checkDuplicates(name, phone);
+    }, 400);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [formData.full_name, formData.phone, patient, checkDuplicates]);
 
   useEffect(() => {
     if (patient) {
@@ -47,8 +91,6 @@ const PatientForm = ({ patient, onClose, onSave }) => {
         status: patient.status || 'Active',
         notes: patient.notes || ''
       });
-      
-      // Set custom field values
       const customData = {};
       columns.forEach(col => {
         if (!col.is_default && patient[col.column_name]) {
@@ -59,7 +101,6 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     }
   }, [patient, columns]);
 
-  // Keyboard: Escape closes, Enter submits
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -86,54 +127,44 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     try {
       const response = await cloudApi.get('/columns');
       setColumns(response.data.columns || []);
-    } catch (error) {
-      // Columns are optional — silently skip if not available
-    }
+    } catch (error) {}
   };
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setIsDirty(true);
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
   const handleCustomFieldChange = (fieldName, value) => {
     setIsDirty(true);
     setCustomFields(prev => ({ ...prev, [fieldName]: value }));
   };
 
-  // Guard close — show confirm if form has unsaved changes
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (isDirty) { setShowCloseConfirm(true); } else { onClose(); }
+  }, [isDirty, onClose]);
+
+  const handleOpenDuplicate = (dupPatient) => {
+    setShowDuplicateModal(false);
+    setPossibleDuplicates([]);
+    setDuplicatesFound(false);
+    onClose();
+    // Pass the duplicate patient up so parent can navigate
+    if (onSave) onSave(null, dupPatient);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    // Allow quick mode (no notes) for secretaries/doctors who want fast intake
-    if (!quickMode && !formData.notes.trim()) {
-      alert('Notes field is mandatory. Use Quick Mode for fast intake without notes.');
-      return;
-    }
+  const handleCreateAnyway = () => {
+    setShowDuplicateModal(false);
+    setPossibleDuplicates([]);
+    setDuplicatesFound(false);
+    doSubmit();
+  };
 
-    // Duplicate detection (only for new patients)
-    if (!patient && existingPatients.length > 0) {
-      const term = formData.full_name.trim().toLowerCase();
-      const duplicate = existingPatients.find(p =>
-        (term && p.full_name?.toLowerCase() === term) ||
-        (formData.phone && p.phone === formData.phone) ||
-        (formData.email && p.email?.toLowerCase() === formData.email.toLowerCase())
-      );
-      if (duplicate) {
-        const proceed = window.confirm(
-          `⚠️ This patient may already exist:\n"${duplicate.full_name}" (${duplicate.phone || duplicate.email || 'no contact'})\n\nContinue adding anyway?`
-        );
-        if (!proceed) return;
-      }
-    }
-
-    // Disable button immediately — prevents double submission
+  const doSubmit = async () => {
     setLoading(true);
-
+    // Continue with existing submit logic...
+    // (re-integrated below to avoid duplicate code)
     try {
       const submitData = {
         ...formData,
@@ -142,9 +173,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 
       setSyncStatus('saving');
 
-      // ── Both roles: write directly to cloud ──────────────────────────────
       if (patient) {
-        // Update existing patient
         const payload = {
           full_name:   submitData.full_name,
           phone:       submitData.phone       || '',
@@ -165,7 +194,6 @@ const PatientForm = ({ patient, onClose, onSave }) => {
           showToast('Patient update queued — will sync when reconnected.', 'warning', 5000);
         }
       } else {
-        // Create new patient
         await cloudApi.post('/patients', {
           full_name:   submitData.full_name,
           phone:       submitData.phone       || '',
@@ -187,15 +215,30 @@ const PatientForm = ({ patient, onClose, onSave }) => {
     }
   };
 
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    if (!quickMode && !formData.notes.trim()) {
+      alert('Notes field is mandatory. Use Quick Mode for fast intake without notes.');
+      return;
+    }
+
+    // If duplicates were found, show the warning modal before proceeding
+    if (!patient && duplicatesFound && possibleDuplicates.length > 0) {
+      setShowDuplicateModal(true);
+      return;
+    }
+
+    await doSubmit();
+  }, [quickMode, formData, patient, duplicatesFound, possibleDuplicates]);
+
   const renderCustomField = (column) => {
     const value = customFields[column.column_name] || '';
-    
     switch (column.column_type) {
       case 'number':
         return (
           <input
             type="number"
-            className="pf-input"
+            style={s.input}
             value={value}
             onChange={(e) => handleCustomFieldChange(column.column_name, e.target.value)}
           />
@@ -204,7 +247,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
         return (
           <input
             type="date"
-            className="pf-input"
+            style={s.input}
             value={value}
             onChange={(e) => handleCustomFieldChange(column.column_name, e.target.value)}
           />
@@ -212,7 +255,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
       case 'boolean':
         return (
           <select
-            className="pf-select"
+            style={s.input}
             value={value}
             onChange={(e) => handleCustomFieldChange(column.column_name, e.target.value)}
           >
@@ -225,7 +268,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
         return (
           <input
             type="text"
-            className="pf-input"
+            style={s.input}
             value={value}
             onChange={(e) => handleCustomFieldChange(column.column_name, e.target.value)}
           />
@@ -236,34 +279,44 @@ const PatientForm = ({ patient, onClose, onSave }) => {
   const customColumns = columns.filter(col => !col.is_default);
 
   return (
-    <div className="pf-overlay">
-      <div className="pf-modal">
-        <div className="pf-header">
-          <div>
-            <h2>{patient ? 'Edit Patient' : 'Add New Patient'}</h2>
-            {!patient && !secretary && (
-              <button
-                type="button"
-                onClick={() => setQuickMode(!quickMode)}
-                style={{
-                  fontSize: 12, color: quickMode ? '#1D9E75' : '#64748b',
-                  background: 'none', border: 'none', cursor: 'pointer', marginTop: 4,
-                }}
-              >
-                {quickMode ? '⚡ Quick mode ON - no notes required' : '⚡ Quick mode - skip notes for fast intake'}
-              </button>
-            )}
+    <div style={s.backdrop} className="modal-backdrop" onClick={handleClose}>
+      <div style={s.modal} onClick={e => e.stopPropagation()}>
+        <div style={s.header}>
+          <div style={s.headerIcon}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
           </div>
-          <button className="pf-close-btn" onClick={handleClose}>×</button>
+          <div>
+            <h2 style={s.title}>{patient ? 'Edit Patient' : 'Add New Patient'}</h2>
+            <p style={s.subtitle}>{patient ? 'Update patient information' : 'Enter patient details below'}</p>
+          </div>
+          <button style={s.closeBtn} onClick={handleClose}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="pf-body">
-          <div className="pf-group">
-            <label className="pf-label">Full Name *</label>
+        <form onSubmit={handleSubmit} style={s.body}>
+          {!patient && !secretary && (
+            <button
+              type="button"
+              onClick={() => setQuickMode(!quickMode)}
+              style={{
+                ...s.quickToggle,
+                background: quickMode ? 'rgba(29,158,117,0.1)' : 'transparent',
+                borderColor: quickMode ? '#1D9E75' : '#e2e8f0',
+                color: quickMode ? '#1D9E75' : '#64748b',
+              }}
+            >
+              {quickMode ? '⚡ Quick Mode ON' : '⚡ Quick Mode'}
+            </button>
+          )}
+
+          <div style={s.fieldGroup}>
+            <label style={s.label}>Full Name *</label>
             <input
               type="text"
               name="full_name"
-              className="pf-input"
+              style={s.input}
               value={formData.full_name}
               onChange={handleChange}
               required
@@ -271,44 +324,44 @@ const PatientForm = ({ patient, onClose, onSave }) => {
             />
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Phone</label>
+          <div style={s.fieldGroup}>
+            <label style={s.label}>Phone</label>
             <input
               type="tel"
               name="phone"
-              className="pf-input"
+              style={s.input}
               value={formData.phone}
               onChange={handleChange}
             />
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Email</label>
+          <div style={s.fieldGroup}>
+            <label style={s.label}>Email</label>
             <input
               type="email"
               name="email"
-              className="pf-input"
+              style={s.input}
               value={formData.email}
               onChange={handleChange}
             />
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Appointment Date</label>
+          <div style={s.fieldGroup}>
+            <label style={s.label}>Appointment Date</label>
             <input
               type="date"
               name="appointment"
-              className="pf-input"
+              style={s.input}
               value={formData.appointment}
               onChange={handleChange}
             />
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Status</label>
+          <div style={s.fieldGroup}>
+            <label style={s.label}>Status</label>
             <select
               name="status"
-              className="pf-select"
+              style={s.input}
               value={formData.status}
               onChange={handleChange}
             >
@@ -319,28 +372,58 @@ const PatientForm = ({ patient, onClose, onSave }) => {
             </select>
           </div>
 
-          <div className="pf-group">
-            <label className="pf-label">Notes * <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(required — reason for visit, symptoms, or any notes)</span></label>
+          <div style={s.fieldGroup}>
+            <label style={s.label}>
+              Notes * <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(required)</span>
+            </label>
             <textarea
               name="notes"
-              className="pf-textarea"
+              style={s.textarea}
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Patient notes (mandatory field)..."
+              placeholder="Reason for visit, symptoms, or any notes..."
               required
             />
           </div>
 
+          {/* ── Smart Duplicate Warning ──────────────────────────────────── */}
+          {!patient && duplicatesFound && possibleDuplicates.length > 0 && (
+            <div style={{
+              background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+              padding: '10px 14px', marginBottom: 16,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+                  {possibleDuplicates.length === 1
+                    ? '1 possible duplicate patient found'
+                    : `${possibleDuplicates.length} possible duplicate patients found`}
+                </span>
+                {duplicateChecking && (
+                  <span style={{ fontSize: 11, color: '#a16207', marginLeft: 'auto' }}>Checking...</span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: '#a16207', lineHeight: 1.4 }}>
+                {possibleDuplicates.slice(0, 2).map(d => d.patient.full_name).join(', ')}
+                {possibleDuplicates.length > 2 && ` +${possibleDuplicates.length - 2} more`}
+              </div>
+            </div>
+          )}
+
           {customColumns.map(column => (
-            <div key={column.id} className="pf-group">
-              <label className="pf-label">{column.column_name}</label>
+            <div key={column.id} style={s.fieldGroup}>
+              <label style={s.label}>{column.column_name}</label>
               {renderCustomField(column)}
             </div>
           ))}
 
-          <div className="pf-footer">
-            <button type="button" className="pf-btn-secondary" onClick={handleClose}>
-              Close
+          <div style={s.footer}>
+            <button type="button" style={s.btnSecondary} onClick={handleClose}>
+              Cancel
             </button>
             {syncStatus && (
               <span style={{
@@ -353,7 +436,11 @@ const PatientForm = ({ patient, onClose, onSave }) => {
             )}
             <button
               type="submit"
-              className="pf-btn-primary"
+              style={{
+                ...s.btnPrimary,
+                opacity: loading || (!quickMode && !formData.notes.trim()) ? 0.6 : 1,
+                cursor: loading || (!quickMode && !formData.notes.trim()) ? 'not-allowed' : 'pointer',
+              }}
               disabled={loading || (!quickMode && !formData.notes.trim())}
             >
               {loading ? 'Saving...' : quickMode ? '⚡ Quick Save' : 'Save Patient'}
@@ -362,7 +449,6 @@ const PatientForm = ({ patient, onClose, onSave }) => {
         </form>
       </div>
 
-      {/* Unsaved changes confirmation */}
       <ConfirmModal
         open={showCloseConfirm}
         title="Discard unsaved changes?"
@@ -374,7 +460,6 @@ const PatientForm = ({ patient, onClose, onSave }) => {
         onCancel={() => setShowCloseConfirm(false)}
       />
 
-      {/* Conflict resolution modal */}
       {conflictModal && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -409,8 +494,80 @@ const PatientForm = ({ patient, onClose, onSave }) => {
           </div>
         </div>
       )}
+
+      {showDuplicateModal && possibleDuplicates.length > 0 && (
+        <DuplicateCheckModal
+          duplicates={possibleDuplicates}
+          onOpenExisting={handleOpenDuplicate}
+          onCreateAnyway={handleCreateAnyway}
+          onClose={() => setShowDuplicateModal(false)}
+        />
+      )}
     </div>
   );
+};
+
+const s = {
+  backdrop: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+  },
+  modal: {
+    background: '#fff', borderRadius: 14, width: 520,
+    maxHeight: '85vh', overflowY: 'auto',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+  },
+  header: {
+    display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px',
+    background: '#f8fafb', borderBottom: '1px solid #e2e8f0',
+    position: 'sticky', top: 0, zIndex: 1,
+  },
+  headerIcon: {
+    width: 34, height: 34, borderRadius: 8, background: '#1D9E75',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  title:    { margin: 0, fontSize: 15, fontWeight: 700, color: '#1a202c' },
+  subtitle: { margin: 0, fontSize: 12, color: '#64748b' },
+  closeBtn: {
+    marginLeft: 'auto', background: 'none', border: 'none',
+    fontSize: 16, color: '#94a3b8', cursor: 'pointer', padding: '4px 6px',
+  },
+  body: { padding: '20px' },
+  quickToggle: {
+    fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8,
+    border: '1px solid', cursor: 'pointer', marginBottom: 16, width: '100%',
+    textAlign: 'center', transition: 'all 0.2s',
+  },
+  fieldGroup: { marginBottom: 14 },
+  label: {
+    display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
+  },
+  input: {
+    width: '100%', height: 40, border: '1px solid #e2e8f0', borderRadius: 8,
+    padding: '0 12px', fontSize: 14, outline: 'none', background: '#fff',
+    transition: 'all 0.2s ease', fontFamily: 'inherit',
+  },
+  textarea: {
+    width: '100%', minHeight: 100, border: '1px solid #e2e8f0', borderRadius: 8,
+    padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff',
+    fontFamily: 'inherit', resize: 'vertical', transition: 'all 0.2s ease',
+  },
+  footer: {
+    display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end',
+    paddingTop: 14, borderTop: '1px solid #e2e8f0', marginTop: 20,
+  },
+  btnSecondary: {
+    padding: '8px 18px', border: '1px solid #e2e8f0', borderRadius: 8,
+    background: '#fff', color: '#64748b', fontSize: 14, fontWeight: 500,
+    cursor: 'pointer', transition: 'all 0.2s',
+  },
+  btnPrimary: {
+    padding: '8px 20px', border: 'none', borderRadius: 8,
+    background: '#1D9E75', color: '#fff', fontSize: 14, fontWeight: 600,
+    boxShadow: '0 2px 8px rgba(29,158,117,0.3)',
+    transition: 'all 0.2s',
+  },
 };
 
 export default PatientForm;

@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const DAY_NAMES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
 const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewChange }) => {
   const [currentMonth, setCurrentMonth] = useState(null);
 
@@ -117,12 +124,6 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
     return days;
   };
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const dayNames = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
   if (!currentMonth) {
     return (
@@ -140,7 +141,7 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
         <button className="calendar-nav-btn" onClick={handlePrevMonth}>
           ←
         </button>
-        <h3>{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}</h3>
+        <h3>{MONTH_NAMES[currentMonth.getMonth()]} {currentMonth.getFullYear()}</h3>
         <button className="calendar-nav-btn" onClick={handleNextMonth}>
           →
         </button>
@@ -148,7 +149,7 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
       
       <div className="calendar-grid">
         {/* Day headers */}
-        {dayNames.map(day => (
+        {DAY_NAMES.map(day => (
           <div key={day} className="calendar-day-header">
             {day}
           </div>

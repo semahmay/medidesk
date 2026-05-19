@@ -6,14 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import cloudApi from '../cloudApi';
-import { getSession } from '../hooks/useClinicSession';
-import { isDoctor } from '../utils/roleUtils';
 import '../new-design.css';
 
 const OperationsDashboard = () => {
-  const { userRole, clinicId } = getSession();
-  const isDoc = isDoctor(userRole);
-
   const [systemStatus, setSystemStatus] = useState({
     api: 'checking',
     database: 'checking',
@@ -30,7 +25,7 @@ const OperationsDashboard = () => {
 
   const [syncQueue, setSyncQueue] = useState({ count: 0, failed: 0 });
   const [errors, setErrors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboard();
@@ -92,13 +87,13 @@ const OperationsDashboard = () => {
   };
 
   const StatusBadge = ({ status }) => (
-    <span style={{
+    <span className="text-sm font-semibold" style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+      padding: '4px 10px', borderRadius: 20,
       background: `${getStatusColor(status)}20`, color: getStatusColor(status),
     }}>
-      <span style={{
-        width: 8, height: 8, borderRadius: '50%',
+      <span className="rounded-full" style={{
+        width: 8, height: 8,
         background: getStatusColor(status),
       }} />
       {status?.toUpperCase() || 'UNKNOWN'}
@@ -111,91 +106,87 @@ const OperationsDashboard = () => {
     <div className="app-container">
       <Sidebar activePage="operations" />
 
-      <div className="main-content" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="main-content page-transition p-20">
+        <div className="flex-row justify-between items-center" style={{ marginBottom: 24 }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', margin: 0 }}>
+            <h1 className="font-bold text-slate-dark" style={{ fontSize: 24, margin: 0 }}>
               Operations Dashboard
             </h1>
-            <p style={{ color: '#64748b', margin: '4px 0 0' }}>System health and diagnostics</p>
+            <p className="text-slate mt-4">System health and diagnostics</p>
           </div>
           <button
             onClick={refreshData}
-            style={{
-              padding: '8px 16px', background: '#1D9E75', color: '#fff',
-              border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            }}
+            className="btn-primary flex-row items-center gap-8 font-semibold"
           >
             ↻ Refresh
           </button>
         </div>
 
         {/* System Status Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>API Status</div>
+        <div className="grid-4" style={{ marginBottom: 24 }}>
+          <div className="card p-20">
+            <div className="text-sm text-slate mb-8">API Status</div>
             <StatusBadge status={systemStatus.api} />
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Database</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate mb-8">Database</div>
             <StatusBadge status={systemStatus.database} />
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>WebSocket</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate mb-8">WebSocket</div>
             <StatusBadge status={systemStatus.websocket} />
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Storage</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate mb-8">Storage</div>
             <StatusBadge status={systemStatus.storage} />
           </div>
         </div>
 
         {/* Metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Total Patients</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#1e293b' }}>{metrics.patients}</div>
+        <div className="grid-4" style={{ marginBottom: 24 }}>
+          <div className="card p-20">
+            <div className="text-sm text-slate">Total Patients</div>
+            <div className="text-3xl font-bold text-slate-dark">{metrics.patients}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Appointments</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#1e293b' }}>{metrics.appointments}</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate">Appointments</div>
+            <div className="text-3xl font-bold text-slate-dark">{metrics.appointments}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Users</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#1e293b' }}>{metrics.users}</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate">Users</div>
+            <div className="text-3xl font-bold text-slate-dark">{metrics.users}</div>
           </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Storage Used</div>
+          <div className="card p-20">
+            <div className="text-sm text-slate">Storage Used</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b' }}>
-              {metrics.storage.used_mb || 0} <span style={{ fontSize: 14, fontWeight: 400 }}>/ {metrics.storage.quota_mb || 500} MB</span>
+              {metrics.storage.used_mb || 0} <span className="text-md font-normal">/ {metrics.storage.quota_mb || 500} MB</span>
             </div>
           </div>
         </div>
 
         {/* Sync Queue Status */}
-        <div style={cardStyle}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', margin: '0 0 16px' }}>
+        <div className="card p-20">
+          <h3 className="text-lg font-semibold text-slate-dark" style={{ margin: '0 0 16px' }}>
             Sync Queue Status
           </h3>
           <div style={{ display: 'flex', gap: 24 }}>
             <div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>Pending Items</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{syncQueue.count}</div>
+              <div className="text-sm text-slate">Pending Items</div>
+              <div className="font-bold" style={{ fontSize: 24, color: '#f59e0b' }}>{syncQueue.count}</div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>Failed</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: syncQueue.failed > 0 ? '#ef4444' : '#22c55e' }}>
+              <div className="text-sm text-slate">Failed</div>
+              <div className="font-bold" style={{ fontSize: 24, color: syncQueue.failed > 0 ? '#ef4444' : '#22c55e' }}>
                 {syncQueue.failed}
               </div>
             </div>
             {syncQueue.failed > 0 && (
               <button
                 onClick={() => window.dispatchEvent(new CustomEvent('retry-sync'))}
+                className="rounded-md text-md font-semibold cursor-pointer"
                 style={{
                   padding: '8px 16px', background: '#ef4444', color: '#fff',
-                  border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                  cursor: 'pointer', marginLeft: 'auto',
+                  border: 'none', marginLeft: 'auto',
                 }}
               >
                 Retry Failed
@@ -205,9 +196,9 @@ const OperationsDashboard = () => {
         </div>
 
         {/* Error Log */}
-        <div style={{ ...cardStyle, marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', margin: 0 }}>
+        <div className="card p-20 mt-16">
+          <div className="flex-row justify-between items-center mb-16">
+            <h3 className="text-lg font-semibold text-slate-dark" style={{ margin: 0 }}>
               Recent Errors
             </h3>
             <button
@@ -220,36 +211,36 @@ const OperationsDashboard = () => {
                 a.download = `medidesk-diagnostics-${new Date().toISOString()}.json`;
                 a.click();
               }}
+              className="bg-slate-100 rounded text-base cursor-pointer"
               style={{
-                padding: '6px 12px', background: '#f1f5f9', color: '#475569',
-                border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13,
-                cursor: 'pointer',
+                padding: '6px 12px', color: '#475569',
+                border: '1px solid #e2e8f0',
               }}
             >
               📥 Export Diagnostics
             </button>
           </div>
           {errors.length === 0 ? (
-            <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+            <div className="p-20 text-center text-slate">
               ✓ No recent errors
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: '#64748b' }}>Time</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: '#64748b' }}>Error</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: '#64748b' }}>Endpoint</th>
+                <tr className="border-b">
+                  <th className="text-sm text-slate" style={{ textAlign: 'left', padding: '8px 12px' }}>Time</th>
+                  <th className="text-sm text-slate" style={{ textAlign: 'left', padding: '8px 12px' }}>Error</th>
+                  <th className="text-sm text-slate" style={{ textAlign: 'left', padding: '8px 12px' }}>Endpoint</th>
                 </tr>
               </thead>
               <tbody>
                 {errors.slice(0, 10).map((err, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '8px 12px', fontSize: 13, color: '#64748b' }}>
+                    <td className="text-base text-slate" style={{ padding: '8px 12px' }}>
                       {new Date(err.timestamp).toLocaleString()}
                     </td>
-                    <td style={{ padding: '8px 12px', fontSize: 13, color: '#ef4444' }}>{err.message}</td>
-                    <td style={{ padding: '8px 12px', fontSize: 13, color: '#64748b' }}>{err.endpoint}</td>
+                    <td className="text-base" style={{ padding: '8px 12px', color: '#ef4444' }}>{err.message}</td>
+                    <td className="text-base text-slate" style={{ padding: '8px 12px' }}>{err.endpoint}</td>
                   </tr>
                 ))}
               </tbody>
@@ -258,28 +249,20 @@ const OperationsDashboard = () => {
         </div>
 
         {/* System Info */}
-        <div style={{ ...cardStyle, marginTop: 16 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', margin: '0 0 16px' }}>
+        <div className="card p-20 mt-16">
+          <h3 className="text-lg font-semibold text-slate-dark" style={{ margin: '0 0 16px' }}>
             Build Information
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: 13 }}>
-            <div><span style={{ color: '#64748b' }}>Version:</span> <span style={{ fontWeight: 600 }}>1.0.0</span></div>
-            <div><span style={{ color: '#64748b' }}>Environment:</span> <span style={{ fontWeight: 600 }}>production</span></div>
-            <div><span style={{ color: '#64748b' }}>Backend:</span> <span style={{ fontWeight: 600 }}>40.81.230.3</span></div>
-            <div><span style={{ color: '#64748b' }}>Database:</span> <span style={{ fontWeight: 600 }}>PostgreSQL</span></div>
+          <div className="grid-2 gap-12 text-base">
+            <div><span className="text-slate">Version:</span> <span className="font-semibold">1.0.0</span></div>
+            <div><span className="text-slate">Environment:</span> <span className="font-semibold">production</span></div>
+            <div><span className="text-slate">Backend:</span> <span className="font-semibold">40.81.230.3</span></div>
+            <div><span className="text-slate">Database:</span> <span className="font-semibold">PostgreSQL</span></div>
           </div>
         </div>
       </div>
     </div>
   );
-};
-
-const cardStyle = {
-  background: '#fff',
-  borderRadius: 12,
-  padding: 20,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-  border: '1px solid #e2e8f0',
 };
 
 export default OperationsDashboard;

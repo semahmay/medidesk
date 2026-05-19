@@ -18,15 +18,15 @@ const AMBER  = '#f59e0b';
 const SLATE  = '#64748b';
 
 const PIE_COLORS = [GREEN, AMBER, RED, SLATE];
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 /** Fill in missing months so the line chart always shows 6 points */
 function fillLast6Months(data) {
   const now = new Date();
   const months = [];
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+    months.push(`${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`);
   }
   return months.map(m => {
     const found = data.find(d => d.month === m);
@@ -37,41 +37,28 @@ function fillLast6Months(data) {
 // ── empty state ───────────────────────────────────────────────────────────────
 
 const EmptyChart = ({ height = 250 }) => (
-  <div style={{
-    height, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 8,
-    color: '#94a3b8'
-  }}>
+  <div className="flex-col items-center justify-center gap-8 text-slate-light" style={{ height }}>
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/>
       <line x1="8" y1="2" x2="8" y2="6"/>
       <line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
-    <span style={{ fontSize: 13, fontWeight: 500 }}>No appointments yet</span>
-    <span style={{ fontSize: 11 }}>Add appointments to see statistics</span>
+    <span className="text-base font-medium">No appointments yet</span>
+    <span className="text-xs">Add appointments to see statistics</span>
   </div>
 );
 
 // ── metric card ───────────────────────────────────────────────────────────────
 
 const MetricCard = ({ value, label, color }) => (
-  <div style={{
-    background: '#fff',
-    border: '0.5px solid var(--color-border-tertiary, #e2e8f0)',
-    borderRadius: 12,
+  <div className="card flex-col justify-center gap-4 flex-1" style={{
     borderLeft: `4px solid ${color}`,
-    padding: '14px 18px',
     maxHeight: 100,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: 4,
-    flex: 1,
     minWidth: 0,
   }}>
-    <div style={{ fontSize: 28, fontWeight: 600, color, lineHeight: 1 }}>{value}</div>
-    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{label}</div>
+    <div className="text-3xl font-semibold" style={{ color, lineHeight: 1 }}>{value}</div>
+    <div className="text-xs text-uppercase text-slate" style={{ letterSpacing: '0.05em' }}>{label}</div>
   </div>
 );
 
@@ -163,7 +150,7 @@ const Analytics = ({ settings, currentUser }) => {
   if (loading) return (
     <div className="app-container">
       <Sidebar activePage="analytics" />
-      <div className="main-content">
+      <div className="main-content page-transition">
         <TopBar settings={settings} currentUser={currentUser} />
         <div className="loading"><div className="spinner" /></div>
       </div>
@@ -173,12 +160,12 @@ const Analytics = ({ settings, currentUser }) => {
   if (error) return (
     <div className="app-container">
       <Sidebar activePage="analytics" />
-      <div className="main-content">
+      <div className="main-content page-transition">
         <TopBar settings={settings} currentUser={currentUser} />
-        <div style={{ padding: 20, textAlign: 'center' }}>
+        <div className="flex-col items-center justify-center p-20">
           <h3>Error loading analytics</h3>
           <p>{error}</p>
-          <button onClick={fetchAnalyticsData} style={{ padding: '10px 20px', background: TEAL, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Retry</button>
+          <button onClick={fetchAnalyticsData} className="rounded-sm cursor-pointer" style={{ padding: '10px 20px', background: TEAL, color: '#fff', border: 'none' }}>Retry</button>
         </div>
       </div>
     </div>
@@ -187,7 +174,7 @@ const Analytics = ({ settings, currentUser }) => {
   return (
     <div className="app-container">
       <Sidebar activePage="analytics" />
-      <div className="main-content" style={{ overflowY: 'auto' }}>
+      <div className="main-content page-transition" style={{ overflowY: 'auto' }}>
         <TopBar settings={settings} currentUser={currentUser} />
 
         <div className="analytics-page" style={{ paddingBottom: 40 }}>

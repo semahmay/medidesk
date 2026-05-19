@@ -1,23 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import cloudApi from '../cloudApi';
 import Sidebar from '../components/Sidebar';
-import TopBar from '../components/TopBar';
 import '../new-design.css';
+
+const SUGGESTED_QUESTIONS = [
+  "What is the correct dosage of Amoxicillin for adults?",
+  "Ibuprofen and Lisinopril — is there an interaction?",
+  "What are the symptoms of appendicitis?",
+  "Normal blood pressure range by age?",
+  "Anaphylaxis emergency protocol",
+  "Metformin contraindications?"
+];
 
 const MedicalReference = ({ settings, currentUser }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const chatContainerRef = useRef(null);
-
-  const suggestedQuestions = [
-    "What is the correct dosage of Amoxicillin for adults?",
-    "Ibuprofen and Lisinopril — is there an interaction?",
-    "What are the symptoms of appendicitis?",
-    "Normal blood pressure range by age?",
-    "Anaphylaxis emergency protocol",
-    "Metformin contraindications?"
-  ];
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -63,14 +62,14 @@ const MedicalReference = ({ settings, currentUser }) => {
   return (
     <div className="app-container">
       <Sidebar activePage="medical-reference" />
-      <div className="main-content">
+      <div className="main-content page-transition">
         <div className="medical-reference-simple">
           {/* Chat Area */}
           <div className="medical-reference-chat" ref={chatContainerRef}>
             {messages.length === 0 ? (
               <div className="medical-reference-empty">
                 <div className="suggested-questions-grid">
-                  {suggestedQuestions.map((question, index) => (
+                  {SUGGESTED_QUESTIONS.map((question, index) => (
                     <button key={index} className="suggested-question-card" onClick={() => handleSendMessage(question)}>
                       {question}
                     </button>

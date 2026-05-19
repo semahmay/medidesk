@@ -1,5 +1,7 @@
 import React from 'react';
 
+const DAY_NAMES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
 const MonthView = ({ selectedDate, appointments, onDateSelect }) => {
   const getDaysInMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -42,7 +44,6 @@ const MonthView = ({ selectedDate, appointments, onDateSelect }) => {
 
   const daysInMonth = getDaysInMonth(selectedDate);
   const firstDay = getFirstDayOfMonth(selectedDate);
-  const dayNames = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
   // Calculate grid layout
   const startDay = firstDay === 0 ? 6 : firstDay - 1; // Convert Sunday (0) to Saturday (6)
@@ -52,7 +53,7 @@ const MonthView = ({ selectedDate, appointments, onDateSelect }) => {
     <div className="month-view">
       <div className="month-grid">
         {/* Day headers */}
-        {dayNames.map(day => (
+        {DAY_NAMES.map(day => (
           <div key={day} className="month-day-header">
             {day}
           </div>
@@ -100,4 +101,4 @@ const MonthView = ({ selectedDate, appointments, onDateSelect }) => {
   );
 };
 
-export default MonthView;
+export default React.memo(MonthView);

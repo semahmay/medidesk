@@ -99,6 +99,7 @@ def _create_pg_indexes():
         "CREATE INDEX IF NOT EXISTS idx_patients_status        ON patients(clinic_id, status)",
         "CREATE INDEX IF NOT EXISTS idx_patients_search_name    ON patients(clinic_id, full_name)",
         "CREATE INDEX IF NOT EXISTS idx_patients_search_contact ON patients(clinic_id, phone, email)",
+        "CREATE INDEX IF NOT EXISTS idx_patients_phone        ON patients(phone)",
         "CREATE INDEX IF NOT EXISTS idx_patients_search_notes   ON patients(clinic_id, notes)",
         "CREATE INDEX IF NOT EXISTS idx_appointments_clinic_id ON appointments(clinic_id)",
         "CREATE INDEX IF NOT EXISTS idx_appointments_date      ON appointments(clinic_id, date)",

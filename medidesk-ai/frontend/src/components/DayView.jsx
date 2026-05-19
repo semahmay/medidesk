@@ -69,4 +69,4 @@ const DayView = ({ selectedDate, appointments }) => {
   );
 };
 
-export default DayView;
+export default React.memo(DayView);

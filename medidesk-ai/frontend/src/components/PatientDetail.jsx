@@ -341,7 +341,7 @@ Patient:
       <div className="patient-details">
 
         {/* Fixed header — shrinks to content */}
-        <div style={{ flexShrink: 0 }}>
+        <div className="flex-shrink-0">
           <div className="patient-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div className="patient-detail-info">
               <div className="patient-avatar">{getInitials()}</div>
@@ -351,7 +351,7 @@ Patient:
                 <div className={`status-badge status-${selectedPatient.status?.toLowerCase()}`}>{selectedPatient.status}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginTop: 4 }}>
+            <div className="flex-row gap-8 flex-shrink-0 mt-10">
               {/* Restore button — only shown when patient is soft-deleted, doctor only */}
               {doctorMode && selectedPatient.deleted_at && (
                 <button
@@ -384,11 +384,11 @@ Patient:
             </div>
           </div>
 
-          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginTop: 12 }}>
+          <div className="flex-row border-b">
             {['overview', 'timeline'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{
-                padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: activeTab === tab ? 600 : 400,
+              <button key={tab} onClick={() => setActiveTab(tab)} className="cursor-pointer text-base" style={{
+                padding: '8px 16px', border: 'none', background: 'none',
+                fontWeight: activeTab === tab ? 600 : 400,
                 color: activeTab === tab ? '#1D9E75' : '#64748b',
                 borderBottom: activeTab === tab ? '2px solid #1D9E75' : '2px solid transparent',
                 marginBottom: -1,
@@ -442,9 +442,9 @@ Patient:
 
                 {/* Upload progress bar */}
                 {uploading && uploadProgress >= 0 && (
-                  <div style={{ margin: '4px 0 8px', background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', borderRadius: 4, transition: 'width 0.2s',
+                  <div className="rounded-sm overflow-hidden" style={{ margin: '4px 0 8px', background: '#e2e8f0', height: 6 }}>
+                    <div className="h-full rounded-sm" style={{
+                      transition: 'width 0.2s',
                       background: uploadProgress === 100 ? '#10b981' : '#1D9E75',
                       width: `${uploadProgress}%`,
                     }} />
@@ -522,7 +522,7 @@ Patient:
         {activeTab === 'timeline' && (
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 4px' }}>
             {timeline.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 13 }}>No activity yet</div>
+              <div className="text-center text-slate p-20">No activity yet</div>
             ) : (
               <div style={{ position: 'relative', paddingLeft: 32 }}>
                 <div style={{ position: 'absolute', left: 12, top: 0, bottom: 0, width: 2, background: '#e2e8f0' }} />
@@ -533,8 +533,8 @@ Patient:
                       background: '#f8fafc', border: '2px solid #e2e8f0',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
                     }}>{ev.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', lineHeight: 1.4 }}>{ev.label}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{fmtDate(ev.date)}</div>
+                    <div className="text-base font-medium text-slate-dark" style={{ lineHeight: 1.4 }}>{ev.label}</div>
+                    <div className="text-xs text-slate-light" style={{ marginTop: 2 }}>{fmtDate(ev.date)}</div>
                   </div>
                 ))}
               </div>
@@ -550,23 +550,16 @@ Patient:
 
       {/* Prescription Modal — doctor only */}
       {showPrescription && doctorMode && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 560,
-            maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          }}>
+        <div className="prescription-modal-overlay">
+          <div className="prescription-modal">
             {/* Modal header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="prescription-modal-header">
               <span style={{ fontWeight: 600, fontSize: 15, color: '#1e293b' }}>💊 Generate Prescription</span>
               <button onClick={() => setShowPrescription(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
 
             {/* Modal body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            <div className="prescription-modal-body">
               {loadingPrescription && (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
                   <div style={{ width: 32, height: 32, border: '3px solid #e2e8f0', borderTop: '3px solid #7c3aed', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
@@ -650,18 +643,18 @@ Patient:
             </div>
 
             {/* Modal footer */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="prescription-modal-footer">
               {prescriptionData && !loadingPrescription && (
                 <>
-                  <button onClick={printPrescription} style={{ padding: '7px 14px', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+                  <button onClick={printPrescription} className="prescription-print-btn">
                     🖨 Print / Save PDF
                   </button>
-                  <button onClick={generatePrescription} style={{ padding: '7px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+                  <button onClick={generatePrescription} className="prescription-second-btn">
                     ↺ Regenerate
                   </button>
                 </>
               )}
-              <button onClick={() => setShowPrescription(false)} style={{ padding: '7px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+              <button onClick={() => setShowPrescription(false)} className="prescription-second-btn">
                 Close
               </button>
             </div>
