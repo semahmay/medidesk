@@ -203,6 +203,7 @@ export async function syncPatientToCloud(patient) {
       appointment: patient.appointment || '',
       status:      patient.status      || 'Active',
       global_id:   patient.global_id   || undefined,
+      custom_fields: patient.custom_fields || {},
     });
     const cloudPatient = res.data.patient;
     // Clear any prior error for this patient on success
@@ -240,6 +241,8 @@ export async function updateCloudPatient(patient) {
     appointment: patient.appointment || '',
     status:      patient.status      || 'Active',
     updated_at:  patient.updated_at || new Date().toISOString(),
+    custom_fields: patient.custom_fields || {},
+    version:     patient.version != null ? patient.version : 0,
   };
 
   try {
@@ -339,6 +342,7 @@ export async function replayQueue() {
             appointment: item.patient.appointment || '',
             status:      item.patient.status      || 'Active',
             global_id:   item.patient.global_id,
+            custom_fields: item.patient.custom_fields || {},
           });
           const cloudPatient = res.data.patient;
           await resolvePatientErrors(item.patient.global_id, item.patient.id).catch(err => console.warn('[sync] resolvePatientErrors failed', err));
@@ -347,13 +351,21 @@ export async function replayQueue() {
         }
 
         if (item.action === 'update') {
+          const updatePayload = {
+            full_name:     item.patient.full_name,
+            phone:         item.patient.phone         || '',
+            email:         item.patient.email         || '',
+            notes:         item.patient.notes         || '',
+            appointment:   item.patient.appointment   || '',
+            status:        item.patient.status        || 'Active',
+            updated_at:    item.patient.updated_at    || new Date().toISOString(),
+            custom_fields: item.patient.custom_fields || {},
+            version:       item.patient.version != null ? item.patient.version : 0,
+          };
           if (item.patient.global_id) {
-            await cloudApi.put(`/patients/by-global/${item.patient.global_id}`, {
-              ...item.patient,
-              updated_at: item.patient.updated_at || new Date().toISOString(),
-            });
+            await cloudApi.put(`/patients/by-global/${item.patient.global_id}`, updatePayload);
           } else if (item.patient.cloud_id) {
-            await cloudApi.put(`/patients/${item.patient.cloud_id}`, { ...item.patient });
+            await cloudApi.put(`/patients/${item.patient.cloud_id}`, updatePayload);
           } else {
             console.warn('[sync] replayQueue: update item has no global_id or cloud_id — dropping');
             replayed++;
@@ -465,6 +477,8 @@ export async function secretaryCloudWrite(patient, updatedFields) {
     appointment: updatedFields.appointment ?? patient.appointment ?? '',
     status:      updatedFields.status      ?? patient.status      ?? 'Active',
     updated_at:  patient.updated_at,
+    custom_fields: updatedFields.custom_fields ?? patient.custom_fields ?? {},
+    version:     patient.version != null ? patient.version : 0,
   };
 
   try {
@@ -591,10 +605,10 @@ export function mergePatients(local, cloud) {
       const localRecord = localByGlobalId.get(cloudPatient.global_id);
       const localIdx    = merged.findIndex(p => p.global_id === cloudPatient.global_id);
 
-      const cloudTime = cloudPatient.updated_at ? new Date(cloudPatient.updated_at).getTime() : 0;
-      const localTime = localRecord.updated_at  ? new Date(localRecord.updated_at).getTime()  : 0;
+      const cloudVersion = cloudPatient.version || 0;
+      const localVersion = localRecord.version || 0;
 
-      if (cloudTime > localTime) {
+      if (cloudVersion > localVersion) {
         const updatedFields = {
           full_name:   cloudPatient.full_name,
           phone:       cloudPatient.phone,
@@ -606,6 +620,7 @@ export function mergePatients(local, cloud) {
           updated_by:  cloudPatient.updated_by,
           cloud_id:    cloudPatient.id,
           global_id:   cloudPatient.global_id,
+          custom_fields: cloudPatient.custom_fields,
         };
         merged[localIdx] = { ...localRecord, ...updatedFields, _fromCloud: true };
         if (localRecord.id) {

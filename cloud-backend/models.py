@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Date, Time
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -13,7 +14,7 @@ def new_global_id():
 class Clinic(Base):
     __tablename__ = "clinics"
 
-    id = Column(String, primary_key=True)           # e.g. MEDI-48291
+    id = Column(String, primary_key=True)
     doctor_user_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -30,16 +31,16 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
-    role = Column(String, nullable=False)           # "doctor" or "secretary"
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    role = Column(String(10), nullable=False)
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="RESTRICT"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     google_id = Column(String, nullable=True, unique=True)
-    email = Column(String, nullable=True)
+    email = Column(String(255), nullable=True)
     password_hash = Column(String, nullable=True)
 
-    status = Column(String, nullable=True, default="invited")
+    status = Column(String(10), nullable=True, default="invited")
     invited_at = Column(DateTime, nullable=True)
     activated_at = Column(DateTime, nullable=True)
 
@@ -50,23 +51,20 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    # global_id is the universal identity key — generated on creation, never changes
-    global_id = Column(String, unique=True, nullable=True, default=new_global_id)
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
-    full_name = Column(String, nullable=False)
-    phone = Column(String)
-    email = Column(String)
+    global_id = Column(String, unique=True, nullable=False, default=new_global_id)
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="RESTRICT"), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    phone = Column(String(30))
+    email = Column(String(255))
     notes = Column(Text)
     appointment = Column(String)
-    status = Column(String, default="Active")
+    status = Column(String(20), default="Active")
     updated_by = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)
-    # version is the clock-skew-safe conflict key.
-    # Incremented by the SERVER on every write — never trusted from client.
-    # Client sends back the version it last saw; server rejects if it has moved on.
     version = Column(Integer, nullable=False, default=0)
+    custom_fields = Column(JSONB, nullable=True)
 
     clinic = relationship("Clinic", back_populates="patients")
 
@@ -75,7 +73,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="CASCADE"), nullable=False)
     sender_role = Column(String, nullable=False)
     text = Column(Text, nullable=False)
     is_task = Column(Boolean, default=False)
@@ -89,15 +87,14 @@ class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    # global_id is the universal identity key — generated on creation, never changes
-    global_id = Column(String, unique=True, nullable=True, default=new_global_id)
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
-    patient_id = Column(Integer, nullable=True)
-    patient_name = Column(String, nullable=False)
-    date = Column(String, nullable=False)
-    start_time = Column(String, nullable=False)
-    end_time = Column(String, nullable=False)
-    status = Column(String, nullable=False, default="scheduled")
+    global_id = Column(String, unique=True, nullable=False, default=new_global_id)
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="RESTRICT"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="SET NULL"), nullable=True)
+    patient_name = Column(String(255), nullable=False)
+    date = Column(Date, nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    status = Column(String(20), nullable=False, default="scheduled")
     notes = Column(Text, nullable=True)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -106,36 +103,31 @@ class Appointment(Base):
     clinic = relationship("Clinic", back_populates="appointments")
 
 
-# ── Audit Log ─────────────────────────────────────────────────────────────────
-
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
-    user_id = Column(String, nullable=True)         # JWT sub — null for system events
-    user_role = Column(String, nullable=True)       # "doctor" | "secretary"
-    action_type = Column(String, nullable=False)    # e.g. CREATE_PATIENT, DELETE_APPOINTMENT
-    entity_type = Column(String, nullable=True)     # "patient" | "appointment" | "auth"
-    entity_id = Column(String, nullable=True)       # global_id of the affected record
-    metadata_json = Column(Text, nullable=True)     # JSON string with extra context
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, nullable=True)
+    user_role = Column(String, nullable=True)
+    action_type = Column(String, nullable=False)
+    entity_type = Column(String, nullable=True)
+    entity_id = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     clinic = relationship("Clinic", back_populates="audit_logs")
 
 
-# ── Notification ──────────────────────────────────────────────────────────────
-
 class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    clinic_id = Column(String, ForeignKey("clinics.id"), nullable=False)
-    # "doctor" | "secretary" | "all"
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="CASCADE"), nullable=False)
     target_role = Column(String, nullable=False, default="all")
-    actor_role = Column(String, nullable=True)       # who triggered this notification
-    actor_name = Column(String, nullable=True)       # display name of the actor
-    type = Column(String, nullable=False)           # "appointment" | "patient" | "message" | "system"
+    actor_role = Column(String, nullable=True)
+    actor_name = Column(String, nullable=True)
+    type = Column(String, nullable=False)
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
@@ -144,33 +136,21 @@ class Notification(Base):
     clinic = relationship("Clinic", back_populates="notifications")
 
 
-# ── Revoked Tokens ────────────────────────────────────────────────────────────
-
 class RevokedToken(Base):
-    """
-    Stores revoked JWT IDs (jti). Checked on every authenticated request.
-    Rows are cleaned up automatically when the token's natural expiry passes.
-    """
     __tablename__ = "revoked_tokens"
 
-    id         = Column(Integer, primary_key=True, autoincrement=True)
-    jti        = Column(String, unique=True, nullable=False, index=True)
-    user_id    = Column(String, nullable=False, index=True)   # JWT sub
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    jti = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(String, nullable=False, index=True)
     revoked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False)             # natural token expiry
+    expires_at = Column(DateTime, nullable=False)
 
-
-# ── Custom Columns ────────────────────────────────────────────────────────────
 
 class ClinicColumn(Base):
-    """
-    Doctor-defined custom columns for the patient table.
-    Scoped per clinic — each clinic has its own column definitions.
-    """
     __tablename__ = "clinic_columns"
 
-    id          = Column(String, primary_key=True)
-    clinic_id   = Column(String, ForeignKey("clinics.id"), nullable=False, index=True)
-    column_name = Column(String, nullable=False)
-    column_type = Column(String, nullable=False, default="text")  # text | number | date | boolean
-    created_at  = Column(DateTime, default=datetime.utcnow)
+    id = Column(String, primary_key=True)
+    clinic_id = Column(String, ForeignKey("clinics.id", ondelete="CASCADE"), nullable=False, index=True)
+    column_name = Column(String(255), nullable=False)
+    column_type = Column(String(10), nullable=False, default="text")
+    created_at = Column(DateTime, default=datetime.utcnow)

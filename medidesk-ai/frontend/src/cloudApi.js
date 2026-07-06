@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL || 'http://40.81.230.3/api';
+const CLOUD_BASE = process.env.REACT_APP_CLOUD_URL;
+if (!CLOUD_BASE) {
+  throw new Error(
+    'FATAL: REACT_APP_CLOUD_URL is not set. Create a .env file with REACT_APP_CLOUD_URL=http://your-backend/api'
+  );
+}
 
 // ── STEP 2: Single source of tokens — in memory ONLY ─────────────────────────
 // Tokens are loaded here exclusively via setCloudTokens() called from:
@@ -95,6 +100,14 @@ cloudApi.interceptors.response.use(
         _accessToken = newAccessToken;
         _refreshToken = newRefreshToken;
 
+        // Reconnect WebSocket with refreshed token so it doesn't get stale auth
+        if (_socket) {
+          _socket.auth = { token: `Bearer ${_accessToken}`, last_seq: _socket.auth?.last_seq || _lastSeq };
+          if (_socket.connected) {
+            _socket.disconnect().connect();
+          }
+        }
+
         // Persist to disk (async, doesn't block)
         if (window.electronAPI?.saveTokens) {
           window.electronAPI.saveTokens({ accessToken: newAccessToken, refreshToken: newRefreshToken });
@@ -176,8 +189,7 @@ export async function connectRealtime() {
     return;
   }
 
-  const WS_BASE = (process.env.REACT_APP_CLOUD_URL || 'http://40.81.230.3/api')
-    .replace('/api', '');
+  const WS_BASE = CLOUD_BASE.replace('/api', '');
 
   _socket = io(WS_BASE, {
     auth: { token: `Bearer ${_accessToken}`, last_seq: _lastSeq },

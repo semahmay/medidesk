@@ -84,6 +84,14 @@ services:
           memory: 512M
 
   # ── Flask API (4 eventlet workers) ───────────────────────────────────────
+  # NOTE: 4 eventlet workers × 1 thread each. Under load (10+ concurrent users),
+  # a slow DB query (~200ms) on one worker blocks ALL other requests to that worker
+  # (eventlet is cooperative, not preemptive). The 4.2s latency outlier seen during
+  # load testing (2026-05-20) was caused by request queue buildup behind busy workers.
+  # If p95 latency exceeds 500ms under sustained load, either:
+  #   - Increase GUNICORN_WORKERS (if memory budget allows)
+  #   - Add PgBouncer for connection pooling (reduces DB connect overhead)
+  #   - Optimize the slowest queries (appointments 30-day window, patient search)
   api:
     build:
       context: .

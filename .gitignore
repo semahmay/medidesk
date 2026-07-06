@@ -48,6 +48,7 @@ yarn-error.log*
 medidesk-ai/frontend/build/
 medidesk-ai/frontend/.env.local
 medidesk-ai/frontend/.env.production.local
+medidesk-ai/frontend/.env
 
 # ── Electron Build ────────────────────────────────────────────────────────────
 medidesk-ai/dist/

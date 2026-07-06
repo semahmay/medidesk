@@ -256,7 +256,7 @@ const OperationsDashboard = () => {
           <div className="grid-2 gap-12 text-base">
             <div><span className="text-slate">Version:</span> <span className="font-semibold">1.0.0</span></div>
             <div><span className="text-slate">Environment:</span> <span className="font-semibold">production</span></div>
-            <div><span className="text-slate">Backend:</span> <span className="font-semibold">40.81.230.3</span></div>
+            <div><span className="text-slate">Backend:</span> <span className="font-semibold">{process.env.REACT_APP_CLOUD_URL?.replace('/api', '') || 'Not configured'}</span></div>
             <div><span className="text-slate">Database:</span> <span className="font-semibold">PostgreSQL</span></div>
           </div>
         </div>

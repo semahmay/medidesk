@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import cloudApi from '../cloudApi';
 import NotesEditor from './NotesEditor';
+import ConfirmModal from './ConfirmModal';
 
 const SortIcon = React.memo(({ col, sortKey, sortDir }) => {
   if (sortKey !== col) return <span style={{ opacity: 0.3, marginLeft: 4 }}>↕</span>;
@@ -23,6 +24,7 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
   const [notesEditorPatient, setNotesEditorPatient] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const [deleteColumnConfirm, setDeleteColumnConfirm] = useState(null); // column ID to confirm deletion for
 
   useEffect(() => {
     fetchColumns();
@@ -37,17 +39,20 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
     }
   };
 
-  const handleDeleteColumn = async (columnId) => {
-    const confirmed = window.confirm('Are you sure you want to delete this column? All data will be lost.');
-    if (confirmed) {
-      try {
-        await cloudApi.delete(`/columns/${columnId}`);
-        fetchColumns();
-        if (onColumnsChange) onColumnsChange();
-      } catch (error) {
-        console.error('Error deleting column:', error);
-        alert('Failed to delete column. Please try again.');
-      }
+  const handleDeleteColumn = (columnId) => {
+    setDeleteColumnConfirm(columnId);
+  };
+
+  const confirmDeleteColumn = async (columnId) => {
+    try {
+      await cloudApi.delete(`/columns/${columnId}`);
+      fetchColumns();
+      if (onColumnsChange) onColumnsChange();
+    } catch (error) {
+      console.error('Error deleting column:', error);
+      alert('Failed to delete column. Please try again.');
+    } finally {
+      setDeleteColumnConfirm(null);
     }
   };
 
@@ -185,7 +190,7 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
               </td>
               {customColumns.map(col => (
                 <td key={col.id} style={{ width: '10%' }}>
-                  {truncateText(patient[col.column_name], 45)}
+                  {truncateText(patient.custom_fields?.[col.column_name], 45)}
                 </td>
               ))}
               <td onClick={(e) => e.stopPropagation()} style={{ width: '10%' }}>
@@ -239,6 +244,16 @@ const PatientTable = React.memo(({ patients, onUpdatePatient, selectedPatient, o
           onSave={handleNotesSaved}
         />
       )}
+
+      <ConfirmModal
+        open={deleteColumnConfirm !== null}
+        title="Delete column?"
+        message="Are you sure you want to delete this column? All data will be lost."
+        confirmLabel="Delete"
+        confirmDanger
+        onConfirm={() => confirmDeleteColumn(deleteColumnConfirm)}
+        onCancel={() => setDeleteColumnConfirm(null)}
+      />
     </div>
   );
 });

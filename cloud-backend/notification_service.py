@@ -1,56 +1,5 @@
 """
-notification_service.py
-Fire-and-forget notification creation.
-
-Usage:
-    from notification_service import notify
-    notify(db, clinic_id=g.clinic_id,
-           type="appointment", target_role="all",
-           title="New appointment", message="Sara booked Ahmed at 10:00")
-
-Rules:
-- NEVER raises — swallows all exceptions.
-- target_role: "doctor" | "secretary" | "all"
+notification_service.py — Backward-compatible wrapper.
+Logic moved to services/notification_service.py. Re-exports for existing imports.
 """
-
-import logging
-from datetime import datetime
-from models import Notification
-
-logger = logging.getLogger("notify")
-
-
-def notify(
-    db,
-    *,
-    clinic_id: str,
-    type: str,
-    title: str,
-    message: str,
-    target_role: str = "all",
-    actor_role: str = None,
-    actor_name: str = None,
-):
-    """
-    Create a notification. Never raises.
-    db must be an open SQLAlchemy session — caller owns commit/close.
-    """
-    try:
-        n = Notification(
-            clinic_id   = clinic_id,
-            type        = type,
-            title       = title,
-            message     = message,
-            target_role = target_role,
-            actor_role  = actor_role,
-            actor_name  = actor_name,
-            is_read     = False,
-            created_at  = datetime.utcnow(),
-        )
-        db.add(n)
-        db.flush()
-        logger.info(f"[NOTIFY] {type} → {target_role} | clinic={clinic_id} | {title}")
-        return n
-    except Exception as exc:
-        logger.error(f"[NOTIFY] Failed to create notification: {exc}")
-        return None
+from services.notification_service import notify

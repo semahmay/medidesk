@@ -93,8 +93,8 @@ const PatientForm = ({ patient, onClose, onSave }) => {
       });
       const customData = {};
       columns.forEach(col => {
-        if (!col.is_default && patient[col.column_name]) {
-          customData[col.column_name] = patient[col.column_name];
+        if (!col.is_default && patient.custom_fields?.[col.column_name]) {
+          customData[col.column_name] = patient.custom_fields[col.column_name];
         }
       });
       setCustomFields(customData);
@@ -181,6 +181,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
           notes:       submitData.notes       || '',
           appointment: submitData.appointment || '',
           status:      submitData.status      || 'Active',
+          custom_fields: submitData.custom_fields || {},
         };
         const result = await updateCloudPatient({ ...patient, ...payload });
         if (result.ok) {
@@ -201,6 +202,7 @@ const PatientForm = ({ patient, onClose, onSave }) => {
           notes:       submitData.notes       || '',
           appointment: submitData.appointment || '',
           status:      submitData.status      || 'Active',
+          custom_fields: submitData.custom_fields || {},
         });
         setSyncStatus('synced');
       }

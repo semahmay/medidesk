@@ -5,6 +5,7 @@ import TopBar from '../components/TopBar';
 import PatientList from '../components/PatientList';
 import PatientDetail from '../components/PatientDetail';
 import PatientForm from '../components/PatientForm';
+import ConfirmModal from '../components/ConfirmModal';
 import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { fetchCloudPatients, replayQueue, loadSyncQueueItems, updateCloudPatient, deleteCloudPatient } from '../services/patientSyncService';
@@ -29,6 +30,7 @@ const Dashboard = ({ settings, currentUser }) => {
   const [columns, setColumns] = useState([]);
   const [language, setLanguage] = useState(settings?.language || 'en');
   const [fetchError, setFetchError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // patient ID to confirm deletion for
   const [cloudOffline, setCloudOffline] = useState(false);
   const [syncWarning, setSyncWarning] = useState(''); // non-empty = pending items after replay
   // Secretary: cache last known cloud patients in memory so offline shows stale data
@@ -134,7 +136,7 @@ const Dashboard = ({ settings, currentUser }) => {
     if (currentUser?.googleId) {
       fetchPatients();
     }
-  }, [debouncedSearch, page]);
+  }, [fetchPatients, debouncedSearch, page]);
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -210,7 +212,7 @@ const Dashboard = ({ settings, currentUser }) => {
               patientName: patient.full_name,
               onKeepLocal: async () => {
                 try {
-                  const forcePayload = { ...localVersion, updated_at: new Date().toISOString() };
+                  const forcePayload = { ...localVersion, updated_at: new Date().toISOString(), version: patient.version != null ? patient.version : 0 };
                   if (patient.global_id) {
                     await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...forcePayload, force: true });
                   } else {
@@ -227,7 +229,7 @@ const Dashboard = ({ settings, currentUser }) => {
               },
               onManualMerge: async (mergedData) => {
                 try {
-                  const mergePayload = { ...mergedData, updated_at: new Date().toISOString() };
+                  const mergePayload = { ...mergedData, updated_at: new Date().toISOString(), version: patient.version != null ? patient.version : 0 };
                   if (patient.global_id) {
                     await cloudApi.put(`/patients/by-global/${patient.global_id}`, { ...mergePayload, force: true });
                   } else {
@@ -260,21 +262,25 @@ const Dashboard = ({ settings, currentUser }) => {
     setShowPatientForm(true);
   };
 
-  const handleDeletePatient = useCallback(async (patientId) => {
-    if (window.confirm('Are you sure you want to delete this patient?')) {
-      const patient = patients.find(p => p.id === patientId || p.global_id === patientId);
-      try {
-        await deleteCloudPatient(patient || { id: patientId });
-        fetchPatients();
-        if (selectedPatient && (selectedPatient.id === patientId || selectedPatient.global_id === patientId)) {
-          setSelectedPatient(null);
-        }
-      } catch (error) {
-        console.error('Error deleting patient:', error);
-        showToast('Failed to delete patient.', 'error', 4000);
+  const handleDeletePatient = useCallback((patientId) => {
+    setDeleteConfirm(patientId);
+  }, []);
+
+  const confirmDeletePatient = useCallback(async (patientId) => {
+    const patient = patients.find(p => p.id === patientId || p.global_id === patientId);
+    try {
+      await deleteCloudPatient(patient || { id: patientId });
+      fetchPatients();
+      if (selectedPatient && (selectedPatient.id === patientId || selectedPatient.global_id === patientId)) {
+        setSelectedPatient(null);
       }
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      showToast('Failed to delete patient.', 'error', 4000);
+    } finally {
+      setDeleteConfirm(null);
     }
-  }, [patients, selectedPatient, showToast]);
+  }, [patients, selectedPatient, showToast, fetchPatients]);
 
   const handlePatientFormClose = () => {
     setShowPatientForm(false);
@@ -472,6 +478,17 @@ const Dashboard = ({ settings, currentUser }) => {
           onSave={handlePatientSaved}
         />
       )}
+
+      {/* Delete confirmation modal — replaces window.confirm */}
+      <ConfirmModal
+        open={deleteConfirm !== null}
+        title="Delete patient?"
+        message="Are you sure you want to delete this patient? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmDanger
+        onConfirm={() => confirmDeletePatient(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   );
 };

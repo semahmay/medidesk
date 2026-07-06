@@ -3,6 +3,15 @@ const path = require('path');
 const { startGoogleLogin } = require('./googleAuth');
 const { loadSession, clearSession, loadClinicSession, clearClinicSession } = require('./userStore');
 
+// ── Backend configuration (MUST be set in environment) ──────────────────────
+const BACKEND_HOST = process.env.BACKEND_HOST;
+const BACKEND_PORT = parseInt(process.env.BACKEND_PORT, 10) || 80;
+if (!BACKEND_HOST) {
+  console.error('FATAL: BACKEND_HOST environment variable is not set. Set it to your backend IP or domain.');
+  process.exit(1);
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 let mainWindow = null;
 let currentUser = null;
 
@@ -99,7 +108,7 @@ function createAppWindow() {
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
-          "connect-src 'self' http://40.81.230.3 https://40.81.230.3",
+          `connect-src 'self' http://${BACKEND_HOST} https://${BACKEND_HOST}`,
           "frame-ancestors 'none'",
           "form-action 'self'",
           "base-uri 'self'",
@@ -195,13 +204,13 @@ ipcMain.handle('start-login', async () => {
     console.log(`[auth] Google login: ${googleUser.email} (${googleUser.googleId})`);
 
     // 2. Exchange Google access token for JWT from cloud backend
-    //    Uses http — cloud backend runs behind Nginx on port 80 (40.81.230.3).
+    //    Uses http — cloud backend runs behind Nginx on port 80 (BACKEND_HOST).
     //    No fallback — if cloud is offline this throws and we return failure.
     const cloudRes = await new Promise((resolve, reject) => {
       const body = JSON.stringify({ google_token: googleUser.googleAccessToken });
       const req = http.request({
-        hostname: '40.81.230.3',
-        port: 80,
+        hostname: BACKEND_HOST,
+        port: BACKEND_PORT,
         path: '/api/auth/google',
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
@@ -270,8 +279,8 @@ ipcMain.handle('secretary-login', async (_e, { clinicId, name, password }) => {
     const cloudRes = await new Promise((resolve, reject) => {
       const body = JSON.stringify({ clinic_id: clinicId, name, password });
       const req = http.request({
-        hostname: '40.81.230.3',
-        port: 80,
+        hostname: BACKEND_HOST,
+        port: BACKEND_PORT,
         path: '/api/auth/secretary/login',
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
@@ -478,8 +487,8 @@ ipcMain.handle('close-window', () => mainWindow?.close());
 ipcMain.handle('check-network', async () => {
   return new Promise((resolve) => {
     const req = http.request({
-      hostname: '40.81.230.3',
-      port: 80,
+      hostname: BACKEND_HOST,
+      port: BACKEND_PORT,
       path: '/api/health',
       method: 'GET',
       timeout: 5000,
