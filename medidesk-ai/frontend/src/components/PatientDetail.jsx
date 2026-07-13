@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import AIChat from './AIChat';
 import NotesEditor from './NotesEditor';
 import VoiceRecorder from './VoiceRecorder';
@@ -6,8 +6,9 @@ import cloudApi from '../cloudApi';
 import { getSession } from '../hooks/useClinicSession';
 import { isDoctor, isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
-import { updateCloudPatient, secretaryCloudWrite } from '../services/patientSyncService';
-import '../new-design.css';
+import { updateCloudPatient } from '../services/patientSyncService';
+import { useLanguage } from '../context/LanguageContext';
+
 
 function exportPatientPDF(patient, attachments) {
   var fmt = function(v) { return v || '—'; };
@@ -71,6 +72,7 @@ const PatientDetail = ({ selectedPatient, settings, onPatientRefresh }) => {
   const doctorMode = isDoctor(userRole);
   const secretaryMode = isSecretary(userRole);
   const { showToast, reportSyncIssue } = useUX();
+  const { t } = useLanguage();
   const [showNotesEditor, setShowNotesEditor] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -87,28 +89,7 @@ const PatientDetail = ({ selectedPatient, settings, onPatientRefresh }) => {
   const [errorPrescription, setErrorPrescription] = useState('');
   const [clinicInfo, setClinicInfo] = useState({ doctor_name: '', clinic_name: '' });
 
-  // Vertical split state — topHeight is % of the body area
-  const [topHeight, setTopHeight] = useState(55);
-  const isDragging = useRef(false);
-  const bodyRef = useRef(null);
 
-  const onDividerMouseDown = useCallback((e) => {
-    e.preventDefault();
-    isDragging.current = true;
-    const onMove = (ev) => {
-      if (!isDragging.current || !bodyRef.current) return;
-      const rect = bodyRef.current.getBoundingClientRect();
-      const pct = ((ev.clientY - rect.top) / rect.height) * 100;
-      setTopHeight(Math.min(80, Math.max(20, pct)));
-    };
-    const onUp = () => {
-      isDragging.current = false;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, []);
 
   useEffect(() => {
     if (selectedPatient) {
@@ -296,12 +277,6 @@ Patient:
     if (!win) { const l = document.createElement('a'); l.href = url; l.download = att.file_name; document.body.appendChild(l); l.click(); document.body.removeChild(l); }
   };
 
-  const truncate = (name, max = 20) => {
-    if (!name || name.length <= max) return name;
-    const ext = name.split('.').pop();
-    return name.substring(0, max - ext.length - 4) + '...' + ext;
-  };
-
   const handleRestorePatient = async () => {
     if (!selectedPatient?.id) return;
     setRestoring(true);
@@ -322,13 +297,13 @@ Patient:
 
   if (!selectedPatient) {
     return (
-      <div className="right-panel">
-        <div className="empty-state">
-          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <div className="patient-detail-pane">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', gap: 10, padding: 40, textAlign: 'center' }}>
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.35 }}>
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          <h3>No Patient Selected</h3>
-          <p>Select a patient from the table to view their details</p>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{t('pd.no_patient')}</div>
+          <div style={{ fontSize: 13 }}>{t('pd.no_patient_sub')}</div>
         </div>
       </div>
     );
@@ -337,210 +312,220 @@ Patient:
   const timeline = buildTimeline(selectedPatient, attachments, appointments);
 
   return (
-    <div className="right-panel">
-      <div className="patient-details">
+    <div className="patient-detail-pane">
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-        {/* Fixed header — shrinks to content */}
-        <div className="flex-shrink-0">
-          <div className="patient-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div className="patient-detail-info">
-              <div className="patient-avatar">{getInitials()}</div>
-              <div className="patient-name-section">
-                <h2 className="patient-name">{selectedPatient.full_name}</h2>
-                <p className="patient-phone">{selectedPatient.phone || 'No phone'}</p>
-                <div className={`status-badge status-${selectedPatient.status?.toLowerCase()}`}>{selectedPatient.status}</div>
-              </div>
+        {/* Fixed header */}
+        <div style={{ flexShrink: 0 }}>
+          <div className="patient-header" style={{ padding: '14px 20px', gap: 12, flexWrap: 'wrap' }}>
+            <div className="avatar avatar-lg">{getInitials()}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 2 }}>{selectedPatient.full_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{selectedPatient.phone || 'No phone'}</div>
+              <span className={`badge ${selectedPatient.status === 'Active' ? 'badge-success' : selectedPatient.status === 'Urgent' ? 'badge-danger' : selectedPatient.status === 'Follow-up' ? 'badge-warning' : 'badge-neutral'}`}>
+                <span className="dot"></span>
+                {selectedPatient.status}
+              </span>
             </div>
-            <div className="flex-row gap-8 flex-shrink-0 mt-10">
-              {/* Restore button — only shown when patient is soft-deleted, doctor only */}
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
               {doctorMode && selectedPatient.deleted_at && (
-                <button
-                  onClick={handleRestorePatient}
-                  disabled={restoring}
-                  style={{
-                    padding: '6px 14px', background: restoring ? '#94a3b8' : '#f59e0b',
-                    color: '#fff', border: 'none', borderRadius: 6, fontSize: 12,
-                    cursor: restoring ? 'not-allowed' : 'pointer', fontWeight: 600,
-                  }}
-                >
-                  {restoring ? 'Restoring...' : '↩ Restore Patient'}
+                <button onClick={handleRestorePatient} disabled={restoring} className="pd-action-btn pd-action-btn--restore">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  {restoring ? 'Restoring…' : 'Restore'}
                 </button>
               )}
-              <button
-                onClick={() => exportPatientPDF(selectedPatient, attachments)}
-                style={{ padding: '6px 14px', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}
-              >
-                ↓ Export PDF
+              <button onClick={() => exportPatientPDF(selectedPatient, attachments)} className="pd-action-btn pd-action-btn--export">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                {t('pd.export')}
               </button>
               {doctorMode && (
-              <button
-                onClick={generatePrescription}
-                disabled={loadingPrescription}
-                style={{ padding: '6px 14px', background: loadingPrescription ? '#94a3b8' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: loadingPrescription ? 'not-allowed' : 'pointer', fontWeight: 500 }}
-              >
-                {loadingPrescription ? '...' : '💊 Prescription'}
-              </button>
+                <button onClick={generatePrescription} disabled={loadingPrescription} className="pd-action-btn pd-action-btn--prescription">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 10h6M12 7v6"/></svg>
+                  {loadingPrescription ? t('pd.generating') : t('pd.prescription')}
+                </button>
               )}
             </div>
           </div>
 
-          <div className="flex-row border-b">
-            {['overview', 'timeline'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className="cursor-pointer text-base" style={{
-                padding: '8px 16px', border: 'none', background: 'none',
-                fontWeight: activeTab === tab ? 600 : 400,
-                color: activeTab === tab ? '#1D9E75' : '#64748b',
-                borderBottom: activeTab === tab ? '2px solid #1D9E75' : '2px solid transparent',
-                marginBottom: -1,
-              }}>
-                {tab === 'overview' ? 'Overview' : 'Timeline'}
+          <div className="pd-tabs">
+            {[
+              { key: 'overview',      label: t('pd.overview') },
+              { key: 'vitals',        label: t('pd.vitals') },
+              { key: 'timeline',      label: t('pd.timeline') },
+              { key: 'appointments',  label: t('pd.appointments') },
+              { key: 'files',         label: t('pd.files') },
+              { key: 'notes',         label: t('pd.notes') },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`pd-tab ${activeTab === tab.key ? 'pd-tab--active' : ''}`}
+              >
+                {tab.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Scrollable/resizable body — takes remaining height */}
-        {activeTab === 'overview' && (
-          <div ref={bodyRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-
-            {/* Top section — scrollable */}
-            <div style={{ height: `${topHeight}%`, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, padding: '12px 0' }}>
-              <div className="meta-cards">
-                <div className="meta-card">
-                  <div className="meta-card-label">Appointment</div>
-                  <div className="meta-card-value">{selectedPatient.appointment || 'Not scheduled'}</div>
-                </div>
-                <div className="meta-card">
-                  <div className="meta-card-label">Files</div>
-                  <div className="meta-card-value">{attachments.length} files</div>
-                </div>
+        {/* Scrollable tab body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          {activeTab === 'overview' && (
+            <div>
+              {/* Info rows */}
+              <div className="info-grid">
+                <div className="info-row"><span className="info-label">{t('pd.phone')}</span><span className="info-value">{selectedPatient.phone || '—'}</span></div>
+                <div className="info-row"><span className="info-label">{t('pd.email')}</span><span className="info-value">{selectedPatient.email || '—'}</span></div>
+                <div className="info-row"><span className="info-label">{t('pd.appointment')}</span><span className="info-value">{selectedPatient.appointment || t('pd.not_scheduled')}</span></div>
+                <div className="info-row"><span className="info-label">{t('pd.files')}</span><span className="info-value">{attachments.length} {t('pd.files').toLowerCase()}</span></div>
               </div>
 
-              <div className="notes-preview">
-                <div className="section-label">Notes</div>
-                <div className="notes-content">
-                  {selectedPatient.notes
-                    ? (selectedPatient.notes.length > 150 ? selectedPatient.notes.substring(0, 150) + '...' : selectedPatient.notes)
-                    : 'No notes available'}
-                </div>
-                <button className="open-editor-btn" onClick={() => setShowNotesEditor(true)}>Open editor →</button>
-              </div>
-
-              <div className="voice-recording-section">
-                <div className="section-label">Voice Recording</div>
-                {secretaryMode ? (
-                  <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0' }}>
-                    Voice recording requires the local backend (doctor only).
-                  </p>
-                ) : (
-                  <VoiceRecorder onTranscriptionComplete={handleTranscriptionComplete} placeholder="Record voice notes for this patient" />
-                )}
-              </div>
-
-              <div className="attachments">
-                <div className="section-label">Attachments</div>
-
-                {/* Upload progress bar */}
-                {uploading && uploadProgress >= 0 && (
-                  <div className="rounded-sm overflow-hidden" style={{ margin: '4px 0 8px', background: '#e2e8f0', height: 6 }}>
-                    <div className="h-full rounded-sm" style={{
-                      transition: 'width 0.2s',
-                      background: uploadProgress === 100 ? '#10b981' : '#1D9E75',
-                      width: `${uploadProgress}%`,
-                    }} />
+              {!secretaryMode && (
+                <div className="card" style={{ marginTop: 16 }}>
+                  <div className="card-head"><h3>{t('pd.voice_recording')}</h3></div>
+                  <div className="card-body">
+                    <VoiceRecorder onTranscriptionComplete={handleTranscriptionComplete} placeholder={t('pd.voice_recording')} />
                   </div>
-                )}
-                {uploadProgress === -1 && (
-                  <p style={{ fontSize: 12, color: '#dc2626', margin: '0 0 6px' }}>
-                    Upload failed. Allowed types: PDF, PNG, JPG, JPEG, GIF, WebP (max 25MB).
-                  </p>
-                )}
+                </div>
+              )}
 
-                <div className="attachments-row">
-                  {attachments.map(att => (
-                    <div key={att.id} className="file-pill" onClick={() => handleDownloadAttachment(att)} title={att.file_name}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                      </svg>
-                      <span>{truncate(att.file_name)}</span>
-                      <button className="file-delete-btn" onClick={e => { e.stopPropagation(); handleDeleteAttachment(att.id); }}>×</button>
+              {doctorMode && (
+                <div className="card" style={{ marginTop: 16 }}>
+                  <div className="card-head"><h3>{t('pd.ai_assistant')}</h3></div>
+                  <div className="card-body">
+                    <AIChat patient={selectedPatient} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'vitals' && (
+            <div>
+              <div className="card">
+                <div className="card-head">
+                  <h3>{t('pd.vital_signs')}</h3>
+                  <button className="pd-card-btn pd-card-btn--add">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    {t('pd.add_record')}
+                  </button>
+                </div>
+                <div className="card-body">
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '20px 0', textAlign: 'center' }}>
+                    {t('pd.no_vitals')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'timeline' && (
+            <div>
+              {timeline.length === 0 ? (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>No activity yet</div>
+              ) : (
+                <div className="timeline">
+                  {timeline.map((ev, i) => (
+                    <div key={i} className="tl-item">
+                      <div className="tl-dot"></div>
+                      <div className="tl-date">{fmtDate(ev.date)}</div>
+                      <div className="tl-title">{ev.label}</div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'appointments' && (
+            <div>
+              <div className="card">
+                <div className="card-head"><h3>{t('pd.appointments')}</h3></div>
+                <div className="card-body">
+                  {appointments.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '20px 0', textAlign: 'center' }}>{t('pd.no_appts')}</p>
+                  ) : (
+                    appointments.map((a, i) => (
+                      <div key={i} className="list-row" style={{ borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ flex: 1, fontSize: 13 }}><b>{a.appointment_date}</b> {a.start_time}–{a.end_time}</div>
+                        <span className={`badge ${a.status === 'completed' ? 'badge-success' : a.status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
+                          <span className="dot"></span>{a.status}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'files' && (
+            <div>
+              <div className="card">
+                <div className="card-head">
+                  <h3>{t('pd.files')} ({attachments.length})</h3>
                   {!secretaryMode && (
-                    <button
-                      className="add-file-btn"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      style={{ opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}
-                    >
-                      {uploading ? `Uploading ${uploadProgress}%...` : '+ Add file'}
+                    <button className="pd-card-btn pd-card-btn--file" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                      {uploading ? `Uploading ${uploadProgress}%…` : t('pd.add_file')}
                     </button>
                   )}
-                  {secretaryMode && attachments.length === 0 && (
-                    <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0' }}>
-                      File attachments are only available on the doctor's computer.
+                </div>
+                <div className="card-body">
+                  {uploading && uploadProgress >= 0 && (
+                    <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginBottom: 12, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--primary-600)', transition: 'width 0.2s' }} />
+                    </div>
+                  )}
+                  {uploadProgress === -1 && <p style={{ fontSize: 12, color: 'var(--danger-600)', margin: '0 0 8px' }}>Upload failed. Allowed: PDF, PNG, JPG, GIF, WebP.</p>}
+                  {attachments.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '20px 0', textAlign: 'center' }}>
+                      {secretaryMode ? 'Only available on the doctor\'s computer.' : t('pd.no_files')}
                     </p>
+                  ) : (
+                    attachments.map(att => (
+                      <div key={att.id} className="list-row" style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => handleDownloadAttachment(att)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                          <polyline points="14,2 14,8 20,8"/>
+                        </svg>
+                        <span style={{ flex: 1, fontSize: 13 }}>{att.file_name}</span>
+                        <button className="btn btn-ghost" style={{ color: 'var(--danger-600)', padding: '2px 6px' }} onClick={e => { e.stopPropagation(); handleDeleteAttachment(att.id); }}>×</button>
+                      </div>
+                    ))
                   )}
                 </div>
                 <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" onChange={handleFileSelect} style={{ display: 'none' }} />
               </div>
             </div>
+          )}
 
-            {/* Drag divider */}
-            <div
-              onMouseDown={onDividerMouseDown}
-              style={{
-                height: 6, background: '#e2e8f0', cursor: 'row-resize', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#3b82f6'}
-              onMouseLeave={e => e.currentTarget.style.background = '#e2e8f0'}
-            >
-              <div style={{ width: 32, height: 2, background: '#94a3b8', borderRadius: 2 }} />
-            </div>
-
-            {/* Bottom section — AI Chat (doctor only) */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-              {doctorMode
-                ? <AIChat patient={selectedPatient} />
-                : (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13, flexDirection: 'column', gap: 6 }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    AI Chat is available for doctors only
-                  </div>
-                )
-              }
-            </div>
-
-          </div>
-        )}
-
-        {activeTab === 'timeline' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 4px' }}>
-            {timeline.length === 0 ? (
-              <div className="text-center text-slate p-20">No activity yet</div>
-            ) : (
-              <div style={{ position: 'relative', paddingLeft: 32 }}>
-                <div style={{ position: 'absolute', left: 12, top: 0, bottom: 0, width: 2, background: '#e2e8f0' }} />
-                {timeline.map((ev, i) => (
-                  <div key={i} style={{ position: 'relative', marginBottom: 20 }}>
-                    <div style={{
-                      position: 'absolute', left: -24, top: 0, width: 22, height: 22, borderRadius: '50%',
-                      background: '#f8fafc', border: '2px solid #e2e8f0',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
-                    }}>{ev.icon}</div>
-                    <div className="text-base font-medium text-slate-dark" style={{ lineHeight: 1.4 }}>{ev.label}</div>
-                    <div className="text-xs text-slate-light" style={{ marginTop: 2 }}>{fmtDate(ev.date)}</div>
-                  </div>
-                ))}
+          {activeTab === 'notes' && (
+            <div>
+              <div className="card">
+                <div className="card-head">
+                  <h3>Clinical Notes</h3>
+                  <button className="pd-card-btn pd-card-btn--edit" onClick={() => setShowNotesEditor(true)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Edit notes
+                  </button>
+                </div>
+                <div className="card-body">
+                  <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                    {selectedPatient.notes || t('pd.no_notes')}
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
-        )}
+              {!secretaryMode && (
+                <div className="card" style={{ marginTop: 16 }}>
+                  <div className="card-head"><h3>{t('pd.voice_recording')}</h3></div>
+                  <div className="card-body">
+                    <VoiceRecorder onTranscriptionComplete={handleTranscriptionComplete} placeholder={t('pd.voice_recording')} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
       </div>
 

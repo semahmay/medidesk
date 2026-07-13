@@ -46,10 +46,9 @@ def upload_cloud_attachment(clinic_id_param):
     if not filename:
         return jsonify({"error": "Invalid filename", "code": "VALIDATION_ERROR"}), 400
 
-    file.seek(0, os.SEEK_END)
-    file_size = file.tell()
-    file.seek(0)
-    if file_size > MAX_FILE_SIZE:
+    # Pre-validate via Content-Length header to avoid reading body for oversized files
+    content_length = request.content_length or 0
+    if content_length > MAX_FILE_SIZE:
         return jsonify({"error": f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB.", "code": "VALIDATION_ERROR"}), 400
 
     ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "webp"}
@@ -132,11 +131,10 @@ def upload_attachment(patient_id):
             return jsonify({"error": "No file selected", "code": "VALIDATION_ERROR"}), 400
 
         filename = os.path.basename(file.filename)
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)
 
-        if file_size > MAX_FILE_SIZE:
+        # Pre-validate via Content-Length header
+        content_length = request.content_length or 0
+        if content_length > MAX_FILE_SIZE:
             return jsonify({"error": f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB.", "code": "VALIDATION_ERROR"}), 400
 
         file_url = storage.save(g.clinic_id, filename, file, patient_global_id=patient.global_id)

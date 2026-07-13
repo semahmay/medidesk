@@ -1,5 +1,6 @@
 import { useState, useEffect, Component } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import DashboardPage from './pages/DashboardPage';
 import Dashboard from './pages/Dashboard-New';
 import Appointments from './pages/Appointments';
 import MedicalReference from './pages/MedicalReference';
@@ -13,12 +14,22 @@ import { isDoctor, isAdmin } from './utils/roleUtils';
 import { setUserId } from './api';
 import { setCloudTokens, connectRealtime, disconnectRealtime } from './cloudApi';
 import { UXProvider, useUX } from './context/UXContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { initSentry, setUserContext, captureError } from './errorTracking/sentry';
 import './new-design.css';
 import './modal.css';
+import './design-system.css';
 
 // Initialize error tracking
 initSentry();
+
+// Apply saved theme immediately (before any render)
+(function () {
+  const theme = localStorage.getItem('theme') || 'light';
+  const lang  = localStorage.getItem('lang')  || 'en';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.setAttribute('lang', lang);
+})();
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
 // Catches any unhandled render error in the component tree.
@@ -198,11 +209,11 @@ function App() {
   }
 
   return (
-    <UXProvider>
-      <AppInner
-        currentUser={currentUser}
-      />
-    </UXProvider>
+    <LanguageProvider>
+      <UXProvider>
+        <AppInner currentUser={currentUser} />
+      </UXProvider>
+    </LanguageProvider>
   );
 }
 
@@ -284,33 +295,32 @@ function AppInner({ currentUser }) {
   return (
     <ErrorBoundary>
       <Router>
-        <div className="app-container">
-          <Routes>
-            <Route path="/" element={<Dashboard currentUser={currentUser} />} />
-            <Route path="/appointments" element={<Appointments currentUser={currentUser} />} />
-            <Route path="/clinic-chat" element={<ClinicChat />} />
+        <Routes>
+          <Route path="/" element={<DashboardPage currentUser={currentUser} />} />
+          <Route path="/patients" element={<Dashboard currentUser={currentUser} />} />
+          <Route path="/appointments" element={<Appointments currentUser={currentUser} />} />
+          <Route path="/clinic-chat" element={<ClinicChat currentUser={currentUser} />} />
 
-            {/* Doctor-only routes */}
-            <Route
-              path="/medical-reference"
-              element={isDoctor(getSession().userRole)
-                ? <MedicalReference currentUser={currentUser} />
-                : <Navigate to="/" replace />}
-            />
-            <Route
-              path="/analytics"
-              element={isDoctor(getSession().userRole)
-                ? <Analytics currentUser={currentUser} />
-                : <Navigate to="/" replace />}
-            />
-            <Route
-              path="/operations"
-              element={isAdmin(getSession().userRole)
-                ? <OperationsDashboard />
-                : <Navigate to="/" replace />}
-            />
-          </Routes>
-        </div>
+          {/* Doctor-only routes */}
+          <Route
+            path="/medical-reference"
+            element={isDoctor(getSession().userRole)
+              ? <MedicalReference currentUser={currentUser} />
+              : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/analytics"
+            element={isDoctor(getSession().userRole)
+              ? <Analytics currentUser={currentUser} />
+              : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/operations"
+            element={isAdmin(getSession().userRole)
+              ? <OperationsDashboard currentUser={currentUser} />
+              : <Navigate to="/" replace />}
+          />
+        </Routes>
       </Router>
 
       {/* ── Global: Conflict Merge Modal ── */}

@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>MediDesk — Design System Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============ TOKENS ============ */
+:root{
+  --primary-900:#0B3B36; --primary-700:#0F5F55; --primary-600:#137A6C; --primary-100:#DCEFEA; --primary-50:#F1F8F6;
+  --ai-700:#4B3FBD; --ai-600:#5B4FE0; --ai-100:#EBE9FC; --ai-50:#F5F4FE;
+  --success-600:#1E8E5A; --success-100:#DFF3E9; --success-700:#166E46;
+  --warning-600:#B5790A; --warning-100:#FBEBD1; --warning-700:#8F5E06;
+  --danger-600:#C4342B; --danger-100:#FBE1DF; --danger-700:#9C2921;
+  --info-600:#2872C9; --info-100:#DEEAFA; --info-700:#1F58A0;
+
+  --bg-canvas:#F7F8F7; --bg-surface:#FFFFFF; --bg-surface-alt:#F1F3F2; --bg-hover:#EEF2F1;
+  --border:#DFE3E1; --border-strong:#CBD2CF;
+  --text-primary:#111816; --text-secondary:#586360; --text-disabled:#A8B0AD;
+  --shadow-card: 0 1px 2px rgba(15,25,22,0.04);
+  --shadow-float: 0 8px 24px rgba(13,25,22,0.14), 0 2px 6px rgba(13,25,22,0.08);
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  --font-ui:'IBM Plex Sans', -apple-system, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+}
+:root[data-theme="dark"]{
+  --primary-100:#123D37; --primary-50:#0F2E2A;
+  --ai-100:#241F52; --ai-50:#1B1740;
+  --success-100:#123726; --warning-100:#3A2A0C; --danger-100:#3B1815; --info-100:#132C4C;
+  --bg-canvas:#0E1412; --bg-surface:#161D1B; --bg-surface-alt:#1E2624; --bg-hover:#233029;
+  --border:#2A332F; --border-strong:#37423C;
+  --text-primary:#EDF1EF; --text-secondary:#9AA7A2; --text-disabled:#5B6663;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-float: 0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font-ui);background:var(--bg-canvas);color:var(--text-primary);font-size:14px;line-height:1.45;}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit;}
+.mono{font-family:var(--font-mono);}
+a{color:inherit;}
+::selection{background:var(--primary-100);}
+:focus-visible{outline:2px solid var(--primary-600);outline-offset:2px;border-radius:4px;}
+
+/* ============ APP SHELL ============ */
+.app{display:grid;grid-template-columns:240px 1fr;grid-template-rows:56px 1fr;height:100vh;min-width:1180px;transition:grid-template-columns .18s ease;}
+.app.collapsed{grid-template-columns:72px 1fr;}
+.topbar{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 20px;border-bottom:1px solid var(--border);background:var(--bg-surface);}
+.sidebar{grid-row:2/3;background:var(--bg-surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px;overflow:hidden;}
+.content{grid-row:2/3;overflow-y:auto;padding:28px 32px;position:relative;}
+
+/* Sidebar */
+.brand{display:flex;align-items:center;gap:10px;padding:8px 8px 16px;white-space:nowrap;}
+.pulse-mark{width:28px;height:28px;flex:none;color:var(--primary-600);}
+.brand-name{font-weight:600;font-size:16px;letter-spacing:-0.01em;}
+.app.collapsed .brand-name, .app.collapsed .navlabel, .app.collapsed .sidebar-foot span{display:none;}
+.nav{display:flex;flex-direction:column;gap:2px;flex:1;}
+.navitem{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:var(--radius-sm);color:var(--text-secondary);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;text-align:left;position:relative;white-space:nowrap;}
+.navitem svg{flex:none;width:18px;height:18px;}
+.navitem:hover{background:var(--bg-hover);color:var(--text-primary);}
+.navitem.active{background:var(--primary-50);color:var(--primary-700);font-weight:600;}
+.navitem.active::before{content:"";position:absolute;left:-12px;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--primary-600);}
+.nav-divider{height:1px;background:var(--border);margin:8px 4px;}
+.sidebar-foot{display:flex;align-items:center;gap:8px;padding:9px 10px;color:var(--text-secondary);cursor:pointer;border-radius:var(--radius-sm);}
+.sidebar-foot:hover{background:var(--bg-hover);}
+.collapse-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
+.collapse-btn:hover{background:var(--bg-hover);}
+
+/* Topbar */
+.clinic-switch{display:flex;align-items:center;gap:8px;font-weight:600;padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;}
+.clinic-switch:hover{background:var(--bg-hover);}
+.clinic-dot{width:8px;height:8px;border-radius:50%;background:var(--success-600);}
+.search-wrap{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;color:var(--text-secondary);}
+.search-wrap svg{width:16px;height:16px;flex:none;}
+.search-wrap input{background:none;border:none;outline:none;flex:1;color:var(--text-primary);}
+.kbd{font-family:var(--font-mono);font-size:11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text-disabled);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.sync-pill{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:5px 10px;border-radius:100px;background:var(--success-100);color:var(--success-700);cursor:pointer;}
+.sync-pill svg{width:13px;height:13px;}
+.icon-btn{width:34px;height:34px;border-radius:var(--radius-sm);border:1px solid transparent;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);position:relative;}
+.icon-btn:hover{background:var(--bg-hover);color:var(--text-primary);}
+.icon-btn svg{width:18px;height:18px;}
+.badge-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--danger-600);border:1.5px solid var(--bg-surface);}
+.profile{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 4px;border-radius:100px;cursor:pointer;}
+.profile:hover{background:var(--bg-hover);}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--primary-100);color:var(--primary-700);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none;}
+.profile-meta{line-height:1.2;}
+.profile-meta .name{font-size:13px;font-weight:600;}
+.profile-meta .role{font-size:11px;color:var(--text-secondary);}
+
+/* Screens */
+.screen{display:none;}
+.screen.active{display:block;animation:fade .15s ease;}
+@keyframes fade{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+.page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.page-title{font-size:22px;font-weight:600;letter-spacing:-0.01em;}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius-sm);font-weight:600;font-size:13px;border:1px solid transparent;cursor:pointer;white-space:nowrap;}
+.btn svg{width:15px;height:15px;}
+.btn-primary{background:var(--primary-600);color:#fff;}
+.btn-primary:hover{background:var(--primary-700);}
+.btn-secondary{background:var(--bg-surface);border-color:var(--border-strong);color:var(--text-primary);}
+.btn-secondary:hover{background:var(--bg-hover);}
+.btn-danger{background:var(--danger-600);color:#fff;}
+.btn-danger:hover{background:var(--danger-700);}
+.btn-ghost{background:none;color:var(--text-secondary);padding:6px 8px;}
+.btn-ghost:hover{background:var(--bg-hover);color:var(--text-primary);}
+.btn-ai{background:var(--ai-600);color:#fff;}
+.btn-ai:hover{background:var(--ai-700);}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* Cards */
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-card);}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+.stat-card{padding:16px 18px;}
+.stat-card .top{display:flex;justify-content:space-between;align-items:flex-start;}
+.stat-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.stat-icon svg{width:16px;height:16px;}
+.stat-num{font-size:26px;font-weight:700;margin-top:10px;letter-spacing:-0.02em;}
+.stat-label{font-size:12.5px;color:var(--text-secondary);margin-top:2px;}
+.stat-delta{font-size:11.5px;font-weight:600;margin-top:8px;}
+
+.dash-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start;}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);}
+.card-head h3{margin:0;font-size:14.5px;font-weight:600;}
+.card-body{padding:6px 8px;}
+.link-btn{font-size:12.5px;font-weight:600;color:var(--primary-700);background:none;border:none;cursor:pointer;}
+
+.list-row{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:8px;cursor:pointer;}
+.list-row:hover{background:var(--bg-hover);}
+.list-row .avatar{width:32px;height:32px;font-size:12px;}
+.row-main{flex:1;min-width:0;}
+.row-name{font-size:13.5px;font-weight:600;}
+.row-sub{font-size:12px;color:var(--text-secondary);}
+.row-time{font-size:12px;color:var(--text-secondary);font-family:var(--font-mono);}
+
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px 3px 7px;border-radius:100px;}
+.badge .dot{width:6px;height:6px;border-radius:50%;}
+.badge-success{background:var(--success-100);color:var(--success-700);}
+.badge-success .dot{background:var(--success-600);}
+.badge-warning{background:var(--warning-100);color:var(--warning-700);}
+.badge-warning .dot{background:var(--warning-600);}
+.badge-danger{background:var(--danger-100);color:var(--danger-700);}
+.badge-danger .dot{background:var(--danger-600);}
+.badge-info{background:var(--info-100);color:var(--info-700);}
+.badge-info .dot{background:var(--info-600);}
+.badge-neutral{background:var(--bg-surface-alt);color:var(--text-secondary);}
+.badge-neutral .dot{background:var(--text-disabled);}
+.badge-ai{background:var(--ai-100);color:var(--ai-700);}
+.badge-ai .dot{background:var(--ai-600);}
+
+.activity-item{display:flex;gap:12px;padding:10px 4px;}
+.act-icon{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;}
+.act-icon svg{width:14px;height:14px;}
+.act-text{font-size:13px;}
+.act-text b{font-weight:600;}
+.act-meta{font-size:11.5px;color:var(--text-secondary);margin-top:1px;}
+
+.ai-shortcut{background:linear-gradient(155deg,var(--ai-50),var(--bg-surface));border:1px solid var(--border);}
+.ai-shortcut .card-body{padding:16px 18px;}
+.ai-shortcut-title{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;margin-bottom:6px;color:var(--ai-700);}
+.ai-shortcut p{font-size:12.5px;color:var(--text-secondary);margin:0 0 12px;}
+
+/* Toolbar / filters */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.chip{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:100px;border:1px solid var(--border);background:var(--bg-surface);cursor:pointer;color:var(--text-secondary);}
+.chip.active{background:var(--primary-50);border-color:var(--primary-100);color:var(--primary-700);}
+.input{padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-surface);}
+.search-input{display:flex;align-items:center;gap:8px;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:7px 10px;min-width:220px;color:var(--text-secondary);}
+.search-input input{background:none;border:none;outline:none;color:var(--text-primary);flex:1;}
+.search-input svg{width:15px;height:15px;}
+.spacer{flex:1;}
+
+/* Table */
+table{width:100%;border-collapse:collapse;}
+.card table{font-size:13px;}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-secondary);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--bg-surface-alt);position:sticky;top:0;}
+td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:hover{background:var(--bg-hover);}
+.cell-patient{display:flex;align-items:center;gap:10px;}
+.row-actions{opacity:0;display:flex;gap:2px;transition:opacity .1s;}
+tr:hover .row-actions{opacity:1;}
+.checkbox{width:16px;height:16px;accent-color:var(--primary-600);}
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;font-size:12.5px;color:var(--text-secondary);}
+
+/* Tabs (patient detail) */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab{padding:10px 4px;margin-right:22px;font-size:13.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;position:relative;top:1px;}
+.tab:hover{color:var(--text-primary);}
+.tab.active{color:var(--primary-700);border-color:var(--primary-600);}
+
+.patient-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;}
+.patient-header .avatar{width:56px;height:56px;font-size:18px;}
+.patient-id{font-size:12px;color:var(--text-secondary);font-family:var(--font-mono);}
+.quick-actions{margin-left:auto;display:flex;gap:8px;}
+
+.detail-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.info-row:last-child{border-bottom:none;}
+.info-label{color:var(--text-secondary);}
+.info-edit{opacity:0;color:var(--text-secondary);cursor:pointer;}
+.info-row:hover .info-edit{opacity:1;}
+
+.timeline{position:relative;padding-left:24px;}
+.timeline::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:1.5px;background:var(--border);}
+.tl-item{position:relative;padding-bottom:22px;}
+.tl-dot{position:absolute;left:-24px;top:2px;width:11px;height:11px;border-radius:50%;background:var(--bg-surface);border:2px solid var(--primary-600);}
+.tl-date{font-size:11px;font-family:var(--font-mono);color:var(--text-secondary);margin-bottom:3px;}
+.tl-title{font-size:13.5px;font-weight:600;}
+.tl-body{font-size:12.5px;color:var(--text-secondary);margin-top:2px;}
+.pulse-divider{width:100%;height:20px;color:var(--border-strong);margin:4px 0 14px;}
+
+/* Calendar */
+.cal-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.view-switch{display:flex;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px;}
+.view-switch button{border:none;background:none;padding:6px 12px;border-radius:6px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--text-secondary);}
+.view-switch button.active{background:var(--bg-surface);color:var(--primary-700);box-shadow:var(--shadow-card);}
+.cal-grid{display:grid;grid-template-columns:56px repeat(5,1fr);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--bg-surface);}
+.cal-daycol-head{padding:10px;text-align:center;border-bottom:1px solid var(--border);border-left:1px solid var(--border);font-size:12px;font-weight:600;background:var(--bg-surface-alt);}
+.cal-daycol-head span{display:block;font-size:15px;font-weight:700;margin-top:2px;}
+.cal-timecol{border-right:1px solid var(--border);}
+.cal-time{height:56px;padding:4px 8px 0 0;text-align:right;font-size:11px;color:var(--text-secondary);font-family:var(--font-mono);border-bottom:1px solid var(--border);}
+.cal-cell{height:56px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);position:relative;}
+.appt{position:absolute;left:4px;right:4px;top:3px;border-radius:6px;padding:4px 7px;font-size:11px;font-weight:600;border-left:3px solid;overflow:hidden;cursor:grab;}
+.appt .t{font-size:10px;font-weight:500;opacity:.85;}
+.appt-confirmed{background:var(--primary-50);border-color:var(--primary-600);color:var(--primary-700);}
+.appt-pending{background:var(--warning-100);border-color:var(--warning-600);color:var(--warning-700);}
+.appt-urgent{background:var(--danger-100);border-color:var(--danger-600);color:var(--danger-700);}
+.appt-completed{background:var(--bg-surface-alt);border-color:var(--border-strong);color:var(--text-secondary);}
+
+.queue-item{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);}
+.queue-item:last-child{border:none;}
+.wait-time{margin-left:auto;font-size:11.5px;font-family:var(--font-mono);color:var(--warning-700);font-weight:600;}
+
+/* AI panel */
+.ai-panel{position:fixed;top:56px;right:-380px;bottom:0;width:380px;background:var(--bg-surface);border-left:1px solid var(--border);box-shadow:var(--shadow-float);transition:right .2s ease;display:flex;flex-direction:column;z-index:50;}
+.ai-panel.open{right:0;}
+.ai-panel-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:linear-gradient(155deg,var(--ai-50),var(--bg-surface));}
+.ai-panel-head h3{margin:0;font-size:14px;display:flex;align-items:center;gap:7px;}
+.ai-panel-head svg{width:17px;height:17px;color:var(--ai-600);}
+.context-chip{margin-left:auto;font-size:11px;font-weight:600;background:var(--ai-100);color:var(--ai-700);padding:3px 9px;border-radius:100px;}
+.ai-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px;}
+.msg{max-width:88%;font-size:13px;padding:10px 12px;border-radius:10px;line-height:1.5;}
+.msg-user{align-self:flex-end;background:var(--primary-50);border:1px solid var(--primary-100);}
+.msg-ai{align-self:flex-start;background:var(--ai-50);border-left:3px solid var(--ai-600);border-radius:4px 10px 10px 4px;}
+.msg-ai-badge{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--ai-700);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px;}
+.msg-actions{display:flex;gap:8px;margin-top:8px;}
+.msg-actions button{font-size:11px;font-weight:600;background:none;border:1px solid var(--border-strong);border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text-secondary);}
+.msg-actions button:hover{background:var(--bg-hover);}
+.ai-quick{display:flex;gap:6px;padding:0 16px 10px;flex-wrap:wrap;}
+.ai-quick button{font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:100px;border:1px solid var(--border);background:var(--bg-surface-alt);cursor:pointer;color:var(--text-primary);}
+.ai-quick button:hover{background:var(--bg-hover);}
+.ai-input{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);}
+.ai-input input{flex:1;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:9px 12px;background:var(--bg-surface-alt);outline:none;}
+.ai-send{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--ai-600);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
+.ai-send:hover{background:var(--ai-700);}
+.ai-send svg{width:16px;height:16px;}
+
+/* Modal / overlay */
+.overlay{position:fixed;inset:0;background:rgba(10,16,14,.45);display:none;align-items:center;justify-content:center;z-index:100;}
+.overlay.open{display:flex;}
+.modal{background:var(--bg-surface);border-radius:var(--radius-lg);width:440px;max-width:92vw;box-shadow:var(--shadow-float);overflow:hidden;}
+.modal.wide{width:560px;}
+.modal-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border);}
+.modal-head.ai-head{background:linear-gradient(155deg,var(--ai-50),var(--bg-surface));}
+.modal-head h3{margin:0;font-size:15px;font-weight:600;flex:1;}
+.modal-body{padding:18px 20px;}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--border);}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);}
+.field input,.field select{width:100%;padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-surface);}
+.med-field{display:flex;align-items:center;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}
+.med-field input{border:none;flex:1;padding:9px 11px;}
+.med-field .unit{padding:0 10px;background:var(--bg-surface-alt);color:var(--text-secondary);font-size:12px;font-weight:600;font-family:var(--font-mono);align-self:stretch;display:flex;align-items:center;border-left:1px solid var(--border);}
+.disclosure{font-size:12.5px;font-weight:600;color:var(--primary-700);background:none;border:none;cursor:pointer;padding:4px 0;}
+.more-fields{display:none;margin-top:8px;}
+.more-fields.open{display:block;}
+.conflict-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.conflict-col{border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;}
+.conflict-col h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-secondary);}
+.conflict-col.pick{border-color:var(--primary-600);background:var(--primary-50);}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200;}
+.toast{display:flex;align-items:center;gap:10px;background:var(--bg-surface);border:1px solid var(--border);box-shadow:var(--shadow-float);border-radius:var(--radius-sm);padding:11px 14px;font-size:13px;min-width:260px;}
+.toast svg{width:16px;height:16px;flex:none;color:var(--success-600);}
+
+/* Component showcase */
+.comp-section{margin-bottom:32px;}
+.comp-section h2{font-size:16px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.row-flex{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.swatch-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;}
+.swatch{border-radius:8px;padding:10px;font-size:11px;font-family:var(--font-mono);border:1px solid var(--border);}
+.swatch b{display:block;font-family:var(--font-ui);font-size:12px;margin-bottom:20px;}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ============ TOPBAR ============ -->
+  <div class="topbar">
+    <button class="collapse-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+    </button>
+    <div class="clinic-switch">
+      <span>Riverside Family Clinic</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input placeholder="Search patients, appointments…" aria-label="Search">
+      <span class="kbd">/</span>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-pill" onclick="showScreen('components')" title="Open sync center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>Synced</span>
+      </div>
+      <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle dark mode">
+        <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <button class="icon-btn" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="badge-dot"></span>
+      </button>
+      <div class="profile">
+        <div class="avatar">DR</div>
+        <div class="profile-meta"><div class="name">Dr. Anya Reyes</div><div class="role">Physician</div></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SIDEBAR ============ -->
+  <div class="sidebar">
+    <div class="brand">
+      <svg class="pulse-mark" viewBox="0 0 32 32" fill="none"><path d="M2 16h6l3-9 5 18 4-13 2 4h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">medidesk</span>
+    </div>
+    <nav class="nav">
+      <button class="navitem active" onclick="showScreen('dashboard',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span class="navlabel">Dashboard</span>
+      </button>
+      <button class="navitem" onclick="showScreen('patients',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="navlabel">Patients</span>
+      </button>
+      <button class="navitem" onclick="showScreen('appointments',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span class="navlabel">Appointments</span>
+      </button>
+      <button class="navitem" onclick="toggleAI()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <span class="navlabel">Chat</span>
+      </button>
+      <button class="navitem" onclick="showScreen('components',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="navlabel">Medical Reference</span>
+      </button>
+      <button class="navitem" onclick="showScreen('components',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="navlabel">Analytics</span>
+      </button>
+      <div class="nav-divider"></div>
+      <button class="navitem" onclick="showScreen('components',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="navlabel">Components</span>
+      </button>
+      <button class="navitem" onclick="showScreen('secretary',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="navlabel">Secretary view</span>
+      </button>
+    </nav>
+    <div class="nav-divider"></div>
+    <div class="sidebar-foot">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="navlabel">Settings</span>
+    </div>
+  </div>
+
+  <!-- ============ CONTENT ============ -->
+  <div class="content">
+
+    <!-- ===== DASHBOARD ===== -->
+    <div class="screen active" id="screen-dashboard">
+      <div class="page-head">
+        <div><div class="eyebrow">Tuesday, July 7</div><div class="page-title">Good morning, Dr. Reyes</div></div>
+        <button class="btn btn-ai" onclick="toggleAI()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>
+          Ask AI assistant
+        </button>
+      </div>
+
+      <div class="stat-grid">
+        <div class="card stat-card">
+          <div class="top"><span class="stat-icon" style="background:var(--primary-100);color:var(--primary-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></div>
+          <div class="stat-num">14</div><div class="stat-label">Today's appointments</div><div class="stat-delta" style="color:var(--success-700)">↑ 3 vs. yesterday</div>
+        </div>
+        <div class="card stat-card">
+          <div class="top"><span class="stat-icon" style="background:var(--warning-100);color:var(--warning-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span></div>
+          <div class="stat-num">3</div><div class="stat-label">Waiting patients</div><div class="stat-delta" style="color:var(--text-secondary)">Avg. wait 8 min</div>
+        </div>
+        <div class="card stat-card">
+          <div class="top"><span class="stat-icon" style="background:var(--info-100);color:var(--info-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span></div>
+          <div class="stat-num">1,248</div><div class="stat-label">Total patients</div><div class="stat-delta" style="color:var(--text-secondary)">+12 this month</div>
+        </div>
+        <div class="card stat-card">
+          <div class="top"><span class="stat-icon" style="background:var(--danger-100);color:var(--danger-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span></div>
+          <div class="stat-num">2</div><div class="stat-label">Urgent cases</div><div class="stat-delta" style="color:var(--danger-700)">Needs attention</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-head"><h3>Upcoming appointments</h3><button class="link-btn" onclick="showScreen('appointments')">View calendar</button></div>
+            <div class="card-body">
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">SC</div><div class="row-main"><div class="row-name">Sarah Chen</div><div class="row-sub">Annual physical · Room 2</div></div><span class="row-time">9:00 AM</span><span class="badge badge-success"><span class="dot"></span>Confirmed</span></div>
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">MJ</div><div class="row-main"><div class="row-name">Marcus Johnson</div><div class="row-sub">Follow-up · Diabetes mgmt</div></div><span class="row-time">9:30 AM</span><span class="badge badge-warning"><span class="dot"></span>Pending</span></div>
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">EP</div><div class="row-main"><div class="row-name">Elena Petrova</div><div class="row-sub">New patient intake</div></div><span class="row-time">10:15 AM</span><span class="badge badge-success"><span class="dot"></span>Confirmed</span></div>
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">RK</div><div class="row-main"><div class="row-name">Raj Kapoor</div><div class="row-sub">Chest pain · Urgent</div></div><span class="row-time">10:45 AM</span><span class="badge badge-danger"><span class="dot"></span>Urgent</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Recent activity</h3></div>
+            <div class="card-body">
+              <div class="activity-item"><span class="act-icon" style="background:var(--primary-100);color:var(--primary-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></span><div><div class="act-text"><b>Dr. Reyes</b> added a clinical note to <b>Sarah Chen</b></div><div class="act-meta">7 min ago</div></div></div>
+              <div class="activity-item"><span class="act-icon" style="background:var(--info-100);color:var(--info-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><div><div class="act-text">Lab results uploaded for <b>Marcus Johnson</b></div><div class="act-meta">32 min ago</div></div></div>
+              <div class="activity-item"><span class="act-icon" style="background:var(--success-100);color:var(--success-700)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><div><div class="act-text"><b>Priya Nair</b> booked a follow-up for Jul 14</div><div class="act-meta">1 hour ago</div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card ai-shortcut" style="margin-bottom:16px;">
+            <div class="card-body">
+              <div class="ai-shortcut-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>AI assistant</div>
+              <p>Ask about a patient's history, draft a prescription, or check a drug interaction — grounded in the current chart.</p>
+              <button class="btn btn-ai" onclick="toggleAI()" style="width:100%;justify-content:center;">Open assistant</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Recently viewed</h3></div>
+            <div class="card-body">
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">SC</div><div class="row-main"><div class="row-name">Sarah Chen</div><div class="row-sub">Last viewed 12 min ago</div></div></div>
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">TW</div><div class="row-main"><div class="row-name">Tom Walsh</div><div class="row-sub">Last viewed 1 hour ago</div></div></div>
+              <div class="list-row" onclick="showScreen('patient-detail')"><div class="avatar">LB</div><div class="row-main"><div class="row-name">Lena Brandt</div><div class="row-sub">Last viewed yesterday</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PATIENTS ===== -->
+    <div class="screen" id="screen-patients">
+      <div class="page-head">
+        <div class="page-title">Patients</div>
+        <div class="row-flex">
+          <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+          <button class="btn btn-primary" onclick="openModal('quickadd')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add patient</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="search-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Search patients…"></div>
+        <button class="chip active">All statuses</button>
+        <button class="chip">Active</button>
+        <button class="chip">Inactive</button>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>Filters</button>
+        <button class="btn btn-ghost">Sort: Last visit ↓</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" class="checkbox"></th>
+            <th>Patient</th><th>Age / Gender</th><th>Phone</th><th>Last visit</th><th>Status</th><th>Sync</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr onclick="showScreen('patient-detail')">
+              <td onclick="event.stopPropagation()"><input type="checkbox" class="checkbox"></td>
+              <td><div class="cell-patient"><div class="avatar">SC</div><div><div class="row-name">Sarah Chen</div><div class="row-sub mono">MRN-00214</div></div></div></td>
+              <td class="mono">34 · F</td><td class="mono">(415) 555-0142</td><td class="mono">Jul 7, 2026</td>
+              <td><span class="badge badge-success"><span class="dot"></span>Active</span></td>
+              <td><span class="badge badge-neutral"><span class="dot" style="background:var(--success-600)"></span>Synced</span></td>
+              <td class="row-actions"><button class="icon-btn" style="width:28px;height:28px" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+            </tr>
+            <tr onclick="showScreen('patient-detail')">
+              <td onclick="event.stopPropagation()"><input type="checkbox" class="checkbox"></td>
+              <td><div class="cell-patient"><div class="avatar">MJ</div><div><div class="row-name">Marcus Johnson</div><div class="row-sub mono">MRN-00198</div></div></div></td>
+              <td class="mono">51 · M</td><td class="mono">(415) 555-0198</td><td class="mono">Jul 6, 2026</td>
+              <td><span class="badge badge-success"><span class="dot"></span>Active</span></td>
+              <td><span class="badge badge-neutral"><span class="dot" style="background:var(--warning-600)"></span>Syncing…</span></td>
+              <td class="row-actions"><button class="icon-btn" style="width:28px;height:28px" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+            </tr>
+            <tr onclick="showScreen('patient-detail')">
+              <td onclick="event.stopPropagation()"><input type="checkbox" class="checkbox"></td>
+              <td><div class="cell-patient"><div class="avatar">EP</div><div><div class="row-name">Elena Petrova</div><div class="row-sub mono">MRN-00302</div></div></div></td>
+              <td class="mono">28 · F</td><td class="mono">(415) 555-0231</td><td class="mono">Jul 5, 2026</td>
+              <td><span class="badge badge-info"><span class="dot"></span>New</span></td>
+              <td><span class="badge badge-neutral"><span class="dot" style="background:var(--success-600)"></span>Synced</span></td>
+              <td class="row-actions"><button class="icon-btn" style="width:28px;height:28px" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+            </tr>
+            <tr onclick="showScreen('patient-detail')">
+              <td onclick="event.stopPropagation()"><input type="checkbox" class="checkbox"></td>
+              <td><div class="cell-patient"><div class="avatar">TW</div><div><div class="row-name">Tom Walsh</div><div class="row-sub mono">MRN-00087</div></div></div></td>
+              <td class="mono">63 · M</td><td class="mono">(415) 555-0076</td><td class="mono">Jun 29, 2026</td>
+              <td><span class="badge badge-neutral"><span class="dot"></span>Inactive</span></td>
+              <td><span class="badge badge-neutral"><span class="dot" style="background:var(--success-600)"></span>Synced</span></td>
+              <td class="row-actions"><button class="icon-btn" style="width:28px;height:28px" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pagination"><span>Showing 1–4 of 1,248</span><div class="row-flex"><button class="btn btn-ghost">Prev</button><button class="btn btn-ghost">Next</button></div></div>
+      </div>
+    </div>
+
+    <!-- ===== PATIENT DETAIL ===== -->
+    <div class="screen" id="screen-patient-detail">
+      <button class="btn btn-ghost" onclick="showScreen('patients')" style="margin-bottom:10px;">&larr; Back to patients</button>
+      <div class="patient-header">
+        <div class="avatar">SC</div>
+        <div>
+          <div style="font-size:20px;font-weight:600;">Sarah Chen <span class="badge badge-success" style="margin-left:6px"><span class="dot"></span>Active</span></div>
+          <div class="patient-id">MRN-00214 · DOB Mar 14, 1992 (34) · Female</div>
+        </div>
+        <div class="quick-actions">
+          <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>Call</button>
+          <button class="btn btn-secondary" onclick="openModal('newappt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="9" y1="13" x2="15" y2="13"/></svg>New appointment</button>
+          <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload file</button>
+          <button class="btn btn-primary" onclick="toggleAI()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>Ask AI</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab active" onclick="setTab(this,'overview')">Overview</div>
+        <div class="tab" onclick="setTab(this,'timeline')">Timeline</div>
+        <div class="tab" onclick="setTab(this,'medical')">Medical info</div>
+        <div class="tab" onclick="setTab(this,'appts')">Appointments</div>
+        <div class="tab" onclick="setTab(this,'files')">Files</div>
+        <div class="tab" onclick="setTab(this,'notes')">Notes</div>
+      </div>
+
+      <div class="pd-tab active" id="pd-overview">
+        <div class="detail-grid">
+          <div>
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-head"><h3>Vitals — last visit, Jul 1</h3></div>
+              <div class="card-body" style="padding:14px 18px;">
+                <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin:0;">
+                  <div><div class="row-sub">Blood pressure</div><div class="mono" style="font-weight:600;font-size:16px;">118/76</div></div>
+                  <div><div class="row-sub">Heart rate</div><div class="mono" style="font-weight:600;font-size:16px;">72 bpm</div></div>
+                  <div><div class="row-sub">Temp</div><div class="mono" style="font-weight:600;font-size:16px;">98.4°F</div></div>
+                  <div><div class="row-sub">Weight</div><div class="mono" style="font-weight:600;font-size:16px;">142 lb</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>AI summary</h3><span class="badge badge-ai"><span class="dot"></span>AI generated</span></div>
+              <div class="card-body" style="padding:14px 18px;font-size:13px;color:var(--text-secondary);line-height:1.6;">
+                Healthy 34-year-old, annual physical due. No active complaints. Seasonal allergy on maintenance loratadine. Due for tetanus booster next visit.
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <div class="card-head"><h3>Contact & details</h3></div>
+              <div class="card-body" style="padding:4px 18px;">
+                <div class="info-row"><span class="info-label">Phone</span><span class="mono">(415) 555-0142</span><svg class="info-edit" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></div>
+                <div class="info-row"><span class="info-label">Email</span><span>s.chen@email.com</span></div>
+                <div class="info-row"><span class="info-label">Insurance</span><span>Blue Shield PPO</span></div>
+                <div class="info-row"><span class="info-label">Allergies</span><span class="badge badge-warning"><span class="dot"></span>Pollen</span></div>
+                <div class="info-row"><span class="info-label">Primary physician</span><span>Dr. Reyes</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pd-tab" id="pd-timeline" style="display:none;">
+        <svg class="pulse-divider" viewBox="0 0 600 20" preserveAspectRatio="none"><path d="M0 10 H220 L235 2 L250 18 L262 10 H600" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-date">JUL 1, 2026</div><div class="tl-title">Annual physical — completed</div><div class="tl-body">Vitals within normal range. Renewed loratadine prescription.</div></div>
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-date">MAR 18, 2026</div><div class="tl-title">Note added by Dr. Reyes</div><div class="tl-body">Patient reports mild seasonal congestion, otherwise well.</div></div>
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-date">JAN 9, 2026</div><div class="tl-title">Lab results uploaded</div><div class="tl-body">CBC and metabolic panel — all values normal.</div></div>
+          <div class="tl-item"><div class="tl-dot" style="border-color:var(--border-strong)"></div><div class="tl-date">NOV 2, 2025</div><div class="tl-title">Patient record created</div><div class="tl-body">Initial intake completed by front desk.</div></div>
+        </div>
+      </div>
+
+      <div class="pd-tab" id="pd-medical" style="display:none;">
+        <div class="card"><div class="card-head"><h3>Conditions & medications</h3></div>
+          <div class="card-body" style="padding:14px 18px;">
+            <table><tbody>
+              <tr><td>Seasonal allergic rhinitis</td><td class="mono">Loratadine 10mg — once daily</td><td><span class="badge badge-success"><span class="dot"></span>Managed</span></td></tr>
+              <tr><td>No known drug allergies</td><td class="mono">—</td><td><span class="badge badge-neutral"><span class="dot"></span>Noted</span></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="pd-tab" id="pd-appts" style="display:none;"><div class="card card-body"><div class="list-row"><div class="row-main"><div class="row-name">Annual physical</div><div class="row-sub">Jul 1, 2026 · Dr. Reyes</div></div><span class="badge badge-neutral"><span class="dot"></span>Completed</span></div><div class="list-row"><div class="row-main"><div class="row-name">Annual physical</div><div class="row-sub">Jul 7, 2026 · Dr. Reyes</div></div><span class="badge badge-success"><span class="dot"></span>Confirmed</span></div></div></div>
+      <div class="pd-tab" id="pd-files" style="display:none;"><div class="card card-body"><div class="list-row"><div class="row-main"><div class="row-name">Lab_results_Jan2026.pdf</div><div class="row-sub">Uploaded Jan 9, 2026 · 240 KB</div></div></div></div></div>
+      <div class="pd-tab" id="pd-notes" style="display:none;"><div class="card card-body"><div class="list-row"><div class="row-main"><div class="row-name">Follow-up on allergy symptoms</div><div class="row-sub">Dr. Reyes · Mar 18, 2026</div></div></div></div></div>
+    </div>
+
+    <!-- ===== APPOINTMENTS ===== -->
+    <div class="screen" id="screen-appointments">
+      <div class="page-head"><div class="page-title">Appointments</div><button class="btn btn-primary" onclick="openModal('newappt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New appointment</button></div>
+      <div class="cal-toolbar">
+        <button class="btn btn-secondary">Today</button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        <div style="font-weight:600;font-size:14.5px;">Jul 6 – 10, 2026</div>
+        <div class="spacer"></div>
+        <div class="view-switch"><button class="active">Day</button><button>Week</button><button>Month</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 240px;gap:16px;align-items:start;">
+        <div class="cal-grid">
+          <div class="cal-daycol-head" style="background:none;border:none;"></div>
+          <div class="cal-daycol-head">MON<span>6</span></div><div class="cal-daycol-head">TUE<span>7</span></div><div class="cal-daycol-head">WED<span>8</span></div><div class="cal-daycol-head">THU<span>9</span></div><div class="cal-daycol-head">FRI<span>10</span></div>
+          <div class="cal-timecol"><div class="cal-time">9 AM</div></div>
+          <div class="cal-cell"></div>
+          <div class="cal-cell"><div class="appt appt-confirmed">Sarah Chen<div class="t">9:00 – 9:30</div></div></div>
+          <div class="cal-cell"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+          <div class="cal-timecol"><div class="cal-time">10 AM</div></div>
+          <div class="cal-cell"></div>
+          <div class="cal-cell"><div class="appt appt-pending">Marcus J.<div class="t">10:00</div></div></div>
+          <div class="cal-cell"><div class="appt appt-confirmed">Elena P.<div class="t">10:15</div></div></div>
+          <div class="cal-cell"><div class="appt appt-urgent">Raj Kapoor<div class="t">10:45 · Urgent</div></div></div>
+          <div class="cal-cell"></div>
+          <div class="cal-timecol"><div class="cal-time">11 AM</div></div>
+          <div class="cal-cell"><div class="appt appt-completed">Tom Walsh<div class="t">11:00</div></div></div>
+          <div class="cal-cell"></div><div class="cal-cell"></div><div class="cal-cell"></div><div class="cal-cell"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Waiting queue</h3></div>
+          <div class="card-body" style="padding:6px 14px;">
+            <div class="queue-item"><div class="avatar" style="width:26px;height:26px;font-size:11px;">RK</div><span>Raj Kapoor</span><span class="wait-time">18m</span></div>
+            <div class="queue-item"><div class="avatar" style="width:26px;height:26px;font-size:11px;">EP</div><span>Elena Petrova</span><span class="wait-time">6m</span></div>
+            <div class="queue-item"><div class="avatar" style="width:26px;height:26px;font-size:11px;">MJ</div><span>Marcus J.</span><span class="wait-time">2m</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECRETARY VIEW ===== -->
+    <div class="screen" id="screen-secretary">
+      <div class="page-head"><div class="page-title">Front desk</div><span class="badge badge-info"><span class="dot"></span>Secretary role</span></div>
+      <div class="detail-grid">
+        <div class="card">
+          <div class="card-head"><h3>Book appointment</h3></div>
+          <div class="card-body" style="padding:16px 18px;">
+            <div class="field"><label>Patient</label><div class="search-input" style="width:100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Type a name…"></div></div>
+            <div class="field" style="display:flex;gap:10px;"><div style="flex:1"><label>Date</label><input class="input" type="text" value="Jul 7, 2026" style="width:100%"></div><div style="flex:1"><label>Time</label><input class="input" type="text" value="2:30 PM" style="width:100%"></div></div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;">Confirm booking</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Quick add patient</h3></div>
+          <div class="card-body" style="padding:16px 18px;">
+            <p style="font-size:12.5px;color:var(--text-secondary);margin-top:0">Name and phone are all you need — details can be added later.</p>
+            <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="openModal('quickadd')">Add walk-in patient</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== COMPONENTS ===== -->
+    <div class="screen" id="screen-components">
+      <div class="page-head"><div class="page-title">Component library</div></div>
+
+      <div class="comp-section">
+        <h2>Color tokens</h2>
+        <div class="swatch-grid">
+          <div class="swatch" style="background:var(--primary-600);color:#fff"><b>Primary</b>#137A6C</div>
+          <div class="swatch" style="background:var(--ai-600);color:#fff"><b>AI accent</b>#5B4FE0</div>
+          <div class="swatch" style="background:var(--success-600);color:#fff"><b>Success</b>#1E8E5A</div>
+          <div class="swatch" style="background:var(--warning-600);color:#fff"><b>Warning</b>#B5790A</div>
+          <div class="swatch" style="background:var(--danger-600);color:#fff"><b>Danger</b>#C4342B</div>
+          <div class="swatch" style="background:var(--info-600);color:#fff"><b>Info</b>#2872C9</div>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Buttons</h2>
+        <div class="row-flex">
+          <button class="btn btn-primary">Primary action</button>
+          <button class="btn btn-secondary">Secondary</button>
+          <button class="btn btn-danger">Delete record</button>
+          <button class="btn btn-ai">AI action</button>
+          <button class="btn btn-ghost">Ghost</button>
+          <button class="btn btn-primary" disabled>Disabled</button>
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Inputs</h2>
+        <div class="row-flex">
+          <input class="input" placeholder="Text input">
+          <div class="search-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Search"></div>
+          <select class="input"><option>Select clinic role…</option></select>
+          <input class="input" type="text" placeholder="Jul 7, 2026">
+          <div class="med-field" style="width:160px"><input placeholder="120"><span class="unit">mmHg</span></div>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Badges</h2>
+        <div class="row-flex">
+          <span class="badge badge-success"><span class="dot"></span>Active</span>
+          <span class="badge badge-warning"><span class="dot"></span>Pending</span>
+          <span class="badge badge-danger"><span class="dot"></span>Urgent</span>
+          <span class="badge badge-info"><span class="dot"></span>New</span>
+          <span class="badge badge-neutral"><span class="dot"></span>Inactive</span>
+          <span class="badge badge-ai"><span class="dot"></span>AI generated</span>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Cards</h2>
+        <div class="row-flex" style="align-items:stretch">
+          <div class="card" style="width:220px;padding:14px"><b style="font-size:13px">Dashboard card</b><div class="stat-num" style="font-size:22px">42</div></div>
+          <div class="card" style="width:220px;padding:14px"><div class="row-flex"><div class="avatar">JD</div><div><div class="row-name">Jane Doe</div><div class="row-sub">Patient card</div></div></div></div>
+          <div class="card ai-shortcut" style="width:220px;padding:14px"><span class="badge badge-ai" style="margin-bottom:8px"><span class="dot"></span>AI response</span><div style="font-size:12.5px">Suggested dosage based on weight and history…</div></div>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Modals & notifications</h2>
+        <div class="row-flex">
+          <button class="btn btn-secondary" onclick="openModal('confirm')">Confirmation modal</button>
+          <button class="btn btn-secondary" onclick="openModal('newappt')">Form modal</button>
+          <button class="btn btn-secondary" onclick="openModal('ai')">AI modal</button>
+          <button class="btn btn-secondary" onclick="openModal('conflict')">Conflict resolution</button>
+          <button class="btn btn-secondary" onclick="showToast()">Show toast</button>
+        </div>
+      </div>
+
+      <div class="comp-section">
+        <h2>Sync & offline status</h2>
+        <div class="row-flex">
+          <span class="badge badge-success"><span class="dot"></span>Synced</span>
+          <span class="badge badge-warning"><span class="dot"></span>Syncing…</span>
+          <span class="badge badge-neutral"><span class="dot" style="background:var(--text-disabled)"></span>Offline — changes saved locally</span>
+          <span class="badge badge-danger"><span class="dot"></span>Sync conflict</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ AI PANEL ============ -->
+<div class="ai-panel" id="aiPanel">
+  <div class="ai-panel-head">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>
+    <h3>AI assistant</h3>
+    <span class="context-chip">Context: Sarah Chen</span>
+    <button class="icon-btn" onclick="toggleAI()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="ai-msgs">
+    <div class="msg msg-user">Summarize Sarah's allergy history and suggest whether she's due for anything.</div>
+    <div class="msg msg-ai">
+      <div class="msg-ai-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>AI response</div>
+      Sarah has seasonal allergic rhinitis, managed with loratadine 10mg daily, no known drug allergies. Based on her record, she is due for a tetanus booster at her next visit.
+      <div class="msg-actions"><button onclick="showToast()">Copy to notes</button><button>Generate prescription</button></div>
+    </div>
+  </div>
+  <div class="ai-quick">
+    <button onclick="showToast()">Generate prescription</button>
+    <button onclick="showToast()">Medical reference</button>
+    <button onclick="showToast()">Check interactions</button>
+  </div>
+  <div class="ai-input">
+    <input placeholder="Ask about this patient…">
+    <button class="ai-send" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+  </div>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+
+  <div class="modal" id="modal-quickadd" style="display:none;">
+    <div class="modal-head"><h3>Add walk-in patient</h3><button class="icon-btn" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Full name</label><input placeholder="e.g. Jordan Lee"></div>
+      <div class="field"><label>Phone number</label><input placeholder="(555) 000-0000"></div>
+      <button class="disclosure" onclick="document.getElementById('moreFields').classList.toggle('open')">+ Add more details</button>
+      <div class="more-fields" id="moreFields">
+        <div class="field"><label>Date of birth</label><input placeholder="MM / DD / YYYY"></div>
+        <div class="field"><label>Notes</label><input placeholder="Reason for visit, referral, etc."></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="closeModal();showToast()">Add patient</button></div>
+  </div>
+
+  <div class="modal wide" id="modal-newappt" style="display:none;">
+    <div class="modal-head"><h3>New appointment</h3><button class="icon-btn" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Patient</label><div class="search-input" style="width:100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input value="Sarah Chen"></div></div>
+      <div class="field" style="display:flex;gap:10px;"><div style="flex:1"><label>Date</label><input class="input" style="width:100%" value="Jul 7, 2026"></div><div style="flex:1"><label>Time</label><input class="input" style="width:100%" value="2:30 PM"></div></div>
+      <div class="field"><label>Reason for visit</label><input placeholder="e.g. Follow-up, annual physical"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="closeModal();showToast()">Confirm appointment</button></div>
+  </div>
+
+  <div class="modal" id="modal-confirm" style="display:none;">
+    <div class="modal-head"><h3>Cancel appointment?</h3></div>
+    <div class="modal-body" style="font-size:13.5px;color:var(--text-secondary)">This appointment will be removed from the calendar and the patient will be notified. This can't be undone.</div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal()">Keep appointment</button><button class="btn btn-danger" onclick="closeModal();showToast()">Cancel appointment</button></div>
+  </div>
+
+  <div class="modal" id="modal-ai" style="display:none;">
+    <div class="modal-head ai-head"><h3>Generate prescription</h3><span class="badge badge-ai"><span class="dot"></span>AI</span></div>
+    <div class="modal-body">
+      <div class="field"><label>Medication</label><input placeholder="e.g. Amoxicillin"></div>
+      <div class="med-field" style="margin-bottom:14px"><input placeholder="500"><span class="unit">mg</span></div>
+      <div class="field"><label>Instructions</label><input placeholder="e.g. Twice daily for 7 days"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-ai" onclick="closeModal();showToast()">Review & sign</button></div>
+  </div>
+
+  <div class="modal wide" id="modal-conflict" style="display:none;">
+    <div class="modal-head"><h3>Resolve sync conflict</h3><span class="badge badge-danger"><span class="dot"></span>Conflict</span></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-top:0">This record was edited on two devices while offline. Choose which version to keep.</p>
+      <div class="conflict-grid">
+        <div class="conflict-col pick"><h4>This device</h4><div style="font-size:13px">Phone: (415) 555-0142</div><div style="font-size:13px;margin-top:4px">Edited 10:02 AM</div></div>
+        <div class="conflict-col"><h4>Other device</h4><div style="font-size:13px">Phone: (415) 555-0199</div><div style="font-size:13px;margin-top:4px">Edited 10:04 AM</div></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal()">Decide later</button><button class="btn btn-primary" onclick="closeModal();showToast()">Keep selected version</button></div>
+  </div>
+
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+function showScreen(id, el){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+id).classList.add('active');
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.remove('active'));
+  if(el) el.classList.add('active');
+}
+function toggleSidebar(){ document.getElementById('app').classList.toggle('collapsed'); }
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark = html.getAttribute('data-theme')==='dark';
+  html.setAttribute('data-theme', isDark ? 'light':'dark');
+}
+function toggleAI(){ document.getElementById('aiPanel').classList.toggle('open'); }
+function setTab(el,name){
+  el.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.pd-tab').forEach(p=>p.style.display='none');
+  document.getElementById('pd-'+name).style.display='block';
+}
+function openModal(name){
+  document.querySelectorAll('.overlay .modal').forEach(m=>m.style.display='none');
+  document.getElementById('modal-'+name).style.display='block';
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+function showToast(){
+  const wrap=document.getElementById('toastWrap');
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Changes saved</span>';
+  wrap.appendChild(t);
+  setTimeout(()=>t.remove(),3500);
+}
+</script>
+</body>
+</html>

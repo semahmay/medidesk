@@ -2,31 +2,59 @@
 core/db.py — Database engine, session management, and migrations.
 """
 
+import contextlib
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
 from core.config import DATABASE_URL
 
-_workers = 4
-
+# Production-optimized connection pool configuration
+# Pool sizing: 4 workers × (pool_size + max_overflow) = 4 × 20 = 80 max connections
+# PostgreSQL max_connections=200 leaves 120 for backups, monitoring, future workers
+# Health checks:
+#   pool_pre_ping=True     - verify connection before every checkout
+#   pool_recycle=3600      - recycle connections after 1 hour (matches PG's default tcp_timeout)
+#   keepalives_idle=30     - send keepalive after 30s idle
+#   keepalives_interval=10 - send keepalive every 10s
+#   keepalives_count=5     - 5 missed keepalives = dead connection
 engine = create_engine(
     DATABASE_URL,
     poolclass=QueuePool,
-    pool_size=5,
-    max_overflow=5,
-    pool_timeout=30,
-    pool_pre_ping=True,
-    pool_recycle=300,
+    pool_size=10,                    # 10 persistent connections per worker (4 workers = 40 baseline)
+    max_overflow=20,                 # Allow 20 additional during spikes (4 workers × 20 = 80 peak)
+    pool_timeout=30,                 # Wait up to 30s for a connection before raising error
+    pool_pre_ping=True,              # Verify connection health before use (prevents stale connection errors)
+    pool_recycle=3600,               # Recycle connections after 1 hour (prevents PG connection timeouts)
+    pool_use_lifo=True,              # Reuse most recently used connections (better PostgreSQL cache locality)
     echo=False,
     connect_args={
         "connect_timeout": 10,
-        "options": "-c statement_timeout=30000",
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+        "options": "-c statement_timeout=30000 -c idle_in_transaction_session_timeout=60000",
     },
 )
 
 @event.listens_for(engine, "connect")
 def _set_connect_timeout(dbapi_conn, connection_record):
     dbapi_conn.set_session(autocommit=False)
+
+
+@event.listens_for(engine, "checkout")
+def _checkout_listener(dbapi_conn, connection_record, connection_proxy):
+    """Log connection checkout for debugging pool exhaustion issues."""
+    import logging
+    logger = logging.getLogger("db")
+    try:
+        pool = engine.pool
+        if pool.checkedout() > pool.size() * 0.8:
+            logger.warning(
+                f"[DB] Pool at {pool.checkedout()}/{pool.size() + pool.overflow()} "
+                f"checked out connections"
+            )
+    except Exception:
+        pass
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -36,6 +64,16 @@ def get_db():
     """Return a SQLAlchemy session. Caller MUST close() in finally."""
     db = SessionLocal()
     return db
+
+
+@contextlib.contextmanager
+def session_scope():
+    """Context manager for safe session handling. Auto-closes on exit."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def init_db():

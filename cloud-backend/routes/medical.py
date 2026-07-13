@@ -144,9 +144,10 @@ def transcribe_audio():
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
+        # Stream file content to avoid loading entire file into memory
         transcription = client.audio.transcriptions.create(
             model="whisper-large-v3",
-            file=(file.filename, file.read(), file.content_type or "audio/webm"),
+            file=(file.filename, file.stream, file.content_type or "audio/webm"),
         )
         return jsonify({"text": transcription.text})
     except Exception as e:

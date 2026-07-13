@@ -1,5 +1,6 @@
 """
 routes/patients.py — Patient CRUD endpoints.
+Performance optimized: pagination enforced, module-level imports.
 """
 
 from flask import Blueprint, request, jsonify, g
@@ -7,6 +8,7 @@ from sqlalchemy import or_, case
 from datetime import datetime
 
 from core.db import get_db
+from core.serializer import serialize
 from models import Clinic, Patient, Appointment
 from services.auth_service import verify_jwt, require_role
 from services.patient_service import (
@@ -24,6 +26,7 @@ bp = Blueprint("patients", __name__, url_prefix="/api/patients")
 @verify_jwt
 @limiter.limit("60 per minute")
 def check_patient_duplicates():
+    """Check for duplicate patients by name or phone. Limited to 10 results."""
     name = request.args.get("name", "").strip()
     phone = request.args.get("phone", "").strip()
     if not name and not phone:
@@ -37,11 +40,7 @@ def check_patient_duplicates():
         if phone:
             filters.append(Patient.phone == phone)
         patients = db.query(Patient).filter(*filters).limit(10).all()
-        serialized = []
-        for p in patients:
-            from app import serialize
-            serialized.append(serialize(p))
-        return jsonify({"duplicates": serialized})
+        return jsonify({"duplicates": [serialize(p) for p in patients]})
     except Exception as e:
         return jsonify({"error": str(e), "code": "INTERNAL_ERROR"}), 500
     finally:
@@ -52,7 +51,10 @@ def check_patient_duplicates():
 @verify_jwt
 @limiter.limit("120 per minute")
 def list_patients():
-    from app import serialize
+    """
+    List patients with pagination and search.
+    Performance: Hard limit of 500 items, offset-based pagination.
+    """
     limit = min(int(request.args.get("limit", 100)), 500)
     offset = 0
     page = request.args.get("page", "1")
@@ -84,6 +86,7 @@ def list_patients():
             "patients": [serialize(p) for p in patients],
             "total": total,
             "page": page,
+            "limit": limit,
         })
     finally:
         db.close()
@@ -93,7 +96,11 @@ def list_patients():
 @verify_jwt
 @limiter.limit("60 per minute")
 def search_patients():
-    from app import serialize
+    """
+    Search patients with ranked results.
+    Performance: Hard limit of 500 items, exact prefix matches ranked higher.
+    Count query combined via query.count() before pagination.
+    """
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify({"error": "q is required", "code": "VALIDATION_ERROR"}), 400
@@ -105,18 +112,20 @@ def search_patients():
     db = get_db()
     try:
         term = f"%{q}%"
+        base_filters = [
+            Patient.clinic_id == g.clinic_id,
+            Patient.deleted_at == None,
+            or_(
+                Patient.full_name.ilike(term),
+                Patient.phone.ilike(term),
+                Patient.email.ilike(term),
+                Patient.notes.ilike(term),
+            ),
+        ]
+        total = db.query(Patient).filter(*base_filters).count()
         patients = (
             db.query(Patient)
-            .filter(
-                Patient.clinic_id == g.clinic_id,
-                Patient.deleted_at == None,
-                or_(
-                    Patient.full_name.ilike(term),
-                    Patient.phone.ilike(term),
-                    Patient.email.ilike(term),
-                    Patient.notes.ilike(term),
-                ),
-            )
+            .filter(*base_filters)
             .order_by(
                 case(
                     (Patient.full_name.ilike(f"{q}%"), 0),
@@ -128,21 +137,7 @@ def search_patients():
             .offset(offset)
             .all()
         )
-        total = (
-            db.query(Patient)
-            .filter(
-                Patient.clinic_id == g.clinic_id,
-                Patient.deleted_at == None,
-                or_(
-                    Patient.full_name.ilike(term),
-                    Patient.phone.ilike(term),
-                    Patient.email.ilike(term),
-                    Patient.notes.ilike(term),
-                ),
-            )
-            .count()
-        )
-        return jsonify({"patients": [serialize(p) for p in patients], "total": total})
+        return jsonify({"patients": [serialize(p) for p in patients], "total": total, "limit": limit, "offset": offset})
     finally:
         db.close()
 
@@ -158,7 +153,7 @@ def handle_create_patient():
 @verify_jwt
 @limiter.limit("120 per minute")
 def get_patient_by_id(patient_id):
-    from app import serialize
+    """Get patient by numeric ID."""
     db = get_db()
     try:
         patient = db.query(Patient).filter(
@@ -176,7 +171,7 @@ def get_patient_by_id(patient_id):
 @verify_jwt
 @limiter.limit("120 per minute")
 def get_patient_by_global_id(global_id_param):
-    from app import serialize
+    """Get patient by global UUID."""
     db = get_db()
     try:
         patient = db.query(Patient).filter(

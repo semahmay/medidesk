@@ -17,13 +17,19 @@ def _rate_limit_key():
     return get_remote_address()
 
 
+# Use Redis for distributed rate limiting if available, with memory fallback
 limiter_storage = REDIS_URL if REDIS_URL else "memory://"
 
 limiter = Limiter(
     key_func=_rate_limit_key,
     default_limits=[],
     storage_uri=limiter_storage,
+    # Expire rate limit keys to prevent unbounded memory growth
+    storage_options={"expiry": 3600} if not REDIS_URL else {},
 )
+
+# Redis connection pool reuse (avoid creating new connections per metric call)
+_redis_pool = None
 
 _allowed_origins = None
 

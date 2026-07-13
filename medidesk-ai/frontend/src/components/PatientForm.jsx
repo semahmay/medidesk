@@ -7,10 +7,12 @@ import { getSession } from '../hooks/useClinicSession';
 import { isSecretary } from '../utils/roleUtils';
 import { useUX } from '../context/UXContext';
 import { updateCloudPatient } from '../services/patientSyncService';
+import { useLanguage } from '../context/LanguageContext';
 
 const PatientForm = ({ patient, onClose, onSave }) => {
   const { clinicId, userRole } = getSession();
   const secretary = isSecretary(userRole);
+  const { t } = useLanguage();
   const [syncStatus, setSyncStatus] = useState('');
   const [formData, setFormData] = useState({
     full_name: '', phone: '', email: '', appointment: '', status: 'Active', notes: ''
@@ -281,106 +283,61 @@ const PatientForm = ({ patient, onClose, onSave }) => {
   const customColumns = columns.filter(col => !col.is_default);
 
   return (
-    <div style={s.backdrop} className="modal-backdrop" onClick={handleClose}>
-      <div style={s.modal} onClick={e => e.stopPropagation()}>
-        <div style={s.header}>
-          <div style={s.headerIcon}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <div>
-            <h2 style={s.title}>{patient ? 'Edit Patient' : 'Add New Patient'}</h2>
-            <p style={s.subtitle}>{patient ? 'Update patient information' : 'Enter patient details below'}</p>
-          </div>
-          <button style={s.closeBtn} onClick={handleClose}>✕</button>
+    <div className="overlay open" onClick={handleClose}>
+      <div className="modal wide" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <h3>{patient ? t('form.edit_patient') : t('form.add_patient')}</h3>
+          <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '0 6px', fontSize: 18, color: 'var(--text-secondary)' }} onClick={handleClose}>×</button>
         </div>
 
-        <form onSubmit={handleSubmit} style={s.body}>
+        <form onSubmit={handleSubmit} className="modal-body">
           {!patient && !secretary && (
             <button
               type="button"
               onClick={() => setQuickMode(!quickMode)}
-              style={{
-                ...s.quickToggle,
-                background: quickMode ? 'rgba(29,158,117,0.1)' : 'transparent',
-                borderColor: quickMode ? '#1D9E75' : '#e2e8f0',
-                color: quickMode ? '#1D9E75' : '#64748b',
-              }}
+              className={`pf-quick-toggle ${quickMode ? 'pf-quick-toggle--on' : ''}`}
             >
-              {quickMode ? '⚡ Quick Mode ON' : '⚡ Quick Mode'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              {quickMode ? t('form.quick_mode_on') : t('form.quick_mode')}
             </button>
           )}
 
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Full Name *</label>
-            <input
-              type="text"
-              name="full_name"
-              style={s.input}
-              value={formData.full_name}
-              onChange={handleChange}
-              required
-              autoFocus
-            />
+          <div className="field">
+            <label>{t('form.full_name')} *</label>
+            <input type="text" name="full_name" value={formData.full_name} onChange={handleChange} required autoFocus />
           </div>
-
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Phone</label>
-            <input
-              type="tel"
-              name="phone"
-              style={s.input}
-              value={formData.phone}
-              onChange={handleChange}
-            />
+          <div className="field">
+            <label>{t('form.phone')}</label>
+            <input type="tel" name="phone" value={formData.phone} onChange={handleChange} />
           </div>
-
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Email</label>
-            <input
-              type="email"
-              name="email"
-              style={s.input}
-              value={formData.email}
-              onChange={handleChange}
-            />
+          <div className="field">
+            <label>{t('form.email')}</label>
+            <input type="email" name="email" value={formData.email} onChange={handleChange} />
           </div>
-
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Appointment Date</label>
-            <input
-              type="date"
-              name="appointment"
-              style={s.input}
-              value={formData.appointment}
-              onChange={handleChange}
-            />
+          <div className="field">
+            <label>{t('form.appointment_date')}</label>
+            <input type="date" name="appointment" value={formData.appointment} onChange={handleChange} />
           </div>
-
-          <div style={s.fieldGroup}>
-            <label style={s.label}>Status</label>
-            <select
-              name="status"
-              style={s.input}
-              value={formData.status}
-              onChange={handleChange}
-            >
-              <option value="Active">Active</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Urgent">Urgent</option>
+          <div className="field">
+            <label>{t('form.status')}</label>
+            <select name="status" value={formData.status} onChange={handleChange}>
+              <option value="Active">{t('patients.active')}</option>
+              <option value="Follow-up">{t('patients.followup')}</option>
+              <option value="Urgent">{t('patients.urgent')}</option>
               <option value="Closed">Closed</option>
             </select>
           </div>
-
-          <div style={s.fieldGroup}>
-            <label style={s.label}>
-              Notes * <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(required)</span>
-            </label>
+          <div className="field">
+            <label>{t('form.notes')} <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400 }}>{t('form.notes_required')}</span></label>
             <textarea
               name="notes"
-              style={s.textarea}
+              style={{ width: '100%', padding: '9px 11px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', fontFamily: 'var(--font-ui)', resize: 'vertical', minHeight: 64, outline: 'none', color: 'var(--text-primary)' }}
               value={formData.notes}
               onChange={handleChange}
               placeholder="Reason for visit, symptoms, or any notes..."
@@ -388,11 +345,19 @@ const PatientForm = ({ patient, onClose, onSave }) => {
             />
           </div>
 
+          {/* Voice dictation for notes */}
+          {!secretary && (
+            <VoiceRecorder
+              onTranscriptionComplete={handleTranscriptionComplete}
+              placeholder="Dictate notes"
+            />
+          )}
+
           {/* ── Smart Duplicate Warning ──────────────────────────────────── */}
           {!patient && duplicatesFound && possibleDuplicates.length > 0 && (
             <div style={{
-              background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
-              padding: '10px 14px', marginBottom: 16,
+              background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-sm)',
+              padding: '10px 14px', marginBottom: 16, fontSize: 13,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -417,35 +382,29 @@ const PatientForm = ({ patient, onClose, onSave }) => {
           )}
 
           {customColumns.map(column => (
-            <div key={column.id} style={s.fieldGroup}>
-              <label style={s.label}>{column.column_name}</label>
+            <div key={column.id} className="field">
+              <label>{column.column_name}</label>
               {renderCustomField(column)}
             </div>
           ))}
 
-          <div style={s.footer}>
-            <button type="button" style={s.btnSecondary} onClick={handleClose}>
-              Cancel
+          <div className="modal-foot" style={{ borderTop: '1px solid var(--border)', padding: '14px 0 0', marginTop: 4 }}>
+            <button type="button" className="btn btn-secondary" onClick={handleClose}>
+              {t('form.cancel')}
             </button>
             {syncStatus && (
-              <span style={{
-                fontSize: 12, padding: '4px 10px', borderRadius: 20, fontWeight: 600,
-                background: syncStatus === 'synced' ? '#d1fae5' : syncStatus === 'offline' ? '#fef3c7' : '#dbeafe',
-                color:      syncStatus === 'synced' ? '#065f46' : syncStatus === 'offline' ? '#92400e' : '#1e40af',
-              }}>
-                {syncStatus === 'saving' ? '⟳ Saving...' : syncStatus === 'synced' ? '✓ Synced' : '⚠ Offline — queued'}
+              <span className={`pf-sync-badge pf-sync-badge--${syncStatus}`}>
+                {syncStatus === 'saving' ? `⟳ ${t('form.saving')}` : syncStatus === 'synced' ? `✓ ${t('common.synced')}` : '⚠ Offline — queued'}
               </span>
             )}
-            <button
-              type="submit"
-              style={{
-                ...s.btnPrimary,
-                opacity: loading || (!quickMode && !formData.notes.trim()) ? 0.6 : 1,
-                cursor: loading || (!quickMode && !formData.notes.trim()) ? 'not-allowed' : 'pointer',
-              }}
-              disabled={loading || (!quickMode && !formData.notes.trim())}
-            >
-              {loading ? 'Saving...' : quickMode ? '⚡ Quick Save' : 'Save Patient'}
+            <button type="submit" className="btn btn-primary" disabled={loading || (!quickMode && !formData.notes.trim())}>
+              {loading ? (
+                <><span className="pf-spinner" /> {t('form.saving')}</>
+              ) : quickMode ? (
+                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> {t('form.quick_save')}</>
+              ) : (
+                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> {patient ? t('form.save_changes') : t('form.save')}</>
+              )}
             </button>
           </div>
         </form>
@@ -463,35 +422,21 @@ const PatientForm = ({ patient, onClose, onSave }) => {
       />
 
       {conflictModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999,
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 12, padding: '24px 28px',
-            width: 380, boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
-          }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
-              Patient updated by another user
-            </h3>
-            <p style={{ margin: '0 0 20px', fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
-              Your changes were not saved because someone else updated this patient more recently.
-              Reload to see the latest version, then re-apply your changes.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setConflictModal(false)}
-                style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: 'pointer', color: '#475569' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { setConflictModal(false); onClose(); onSave(); }}
-                style={{ padding: '8px 16px', background: '#1D9E75', border: 'none', borderRadius: 7, fontSize: 14, fontWeight: 600, cursor: 'pointer', color: '#fff' }}
-              >
-                Reload latest version
-              </button>
+        <div className="overlay open">
+          <div className="modal" style={{ width: 400 }}>
+            <div className="modal-head">
+              <h3>Patient updated by another user</h3>
+              <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '0 6px', fontSize: 18 }} onClick={() => setConflictModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                Your changes were not saved because someone else updated this patient more recently.
+                Reload to see the latest version, then re-apply your changes.
+              </p>
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-secondary" onClick={() => setConflictModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => { setConflictModal(false); onClose(); onSave(); }}>Reload latest version</button>
             </div>
           </div>
         </div>
@@ -510,65 +455,15 @@ const PatientForm = ({ patient, onClose, onSave }) => {
 };
 
 const s = {
-  backdrop: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-  },
-  modal: {
-    background: '#fff', borderRadius: 14, width: 520,
-    maxHeight: '85vh', overflowY: 'auto',
-    boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-  },
-  header: {
-    display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px',
-    background: '#f8fafb', borderBottom: '1px solid #e2e8f0',
-    position: 'sticky', top: 0, zIndex: 1,
-  },
-  headerIcon: {
-    width: 34, height: 34, borderRadius: 8, background: '#1D9E75',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  title:    { margin: 0, fontSize: 15, fontWeight: 700, color: '#1a202c' },
-  subtitle: { margin: 0, fontSize: 12, color: '#64748b' },
-  closeBtn: {
-    marginLeft: 'auto', background: 'none', border: 'none',
-    fontSize: 16, color: '#94a3b8', cursor: 'pointer', padding: '4px 6px',
-  },
-  body: { padding: '20px' },
   quickToggle: {
     fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8,
     border: '1px solid', cursor: 'pointer', marginBottom: 16, width: '100%',
     textAlign: 'center', transition: 'all 0.2s',
   },
-  fieldGroup: { marginBottom: 14 },
-  label: {
-    display: 'block', fontSize: 12, fontWeight: 600, color: '#64748b',
-    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
-  },
   input: {
-    width: '100%', height: 40, border: '1px solid #e2e8f0', borderRadius: 8,
-    padding: '0 12px', fontSize: 14, outline: 'none', background: '#fff',
-    transition: 'all 0.2s ease', fontFamily: 'inherit',
-  },
-  textarea: {
-    width: '100%', minHeight: 100, border: '1px solid #e2e8f0', borderRadius: 8,
-    padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff',
-    fontFamily: 'inherit', resize: 'vertical', transition: 'all 0.2s ease',
-  },
-  footer: {
-    display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end',
-    paddingTop: 14, borderTop: '1px solid #e2e8f0', marginTop: 20,
-  },
-  btnSecondary: {
-    padding: '8px 18px', border: '1px solid #e2e8f0', borderRadius: 8,
-    background: '#fff', color: '#64748b', fontSize: 14, fontWeight: 500,
-    cursor: 'pointer', transition: 'all 0.2s',
-  },
-  btnPrimary: {
-    padding: '8px 20px', border: 'none', borderRadius: 8,
-    background: '#1D9E75', color: '#fff', fontSize: 14, fontWeight: 600,
-    boxShadow: '0 2px 8px rgba(29,158,117,0.3)',
-    transition: 'all 0.2s',
+    width: '100%', height: 40, border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)',
+    padding: '0 12px', fontSize: 14, outline: 'none', background: 'var(--bg-surface)',
+    fontFamily: 'var(--font-ui)',
   },
 };
 

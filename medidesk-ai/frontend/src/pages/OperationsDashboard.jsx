@@ -5,10 +5,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
+import TopBar from '../components/TopBar';
 import cloudApi from '../cloudApi';
-import '../new-design.css';
 
-const OperationsDashboard = () => {
+
+const OperationsDashboard = ({ currentUser }) => {
   const [systemStatus, setSystemStatus] = useState({
     api: 'checking',
     database: 'checking',
@@ -103,10 +104,10 @@ const OperationsDashboard = () => {
   const refreshData = () => loadDashboard();
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
+      <TopBar currentUser={currentUser} />
       <Sidebar activePage="operations" />
-
-      <div className="main-content page-transition p-20">
+      <div className="main-content page-transition" style={{ overflowY: 'auto', padding: '24px 32px' }}>
         <div className="flex-row justify-between items-center" style={{ marginBottom: 24 }}>
           <div>
             <h1 className="font-bold text-slate-dark" style={{ fontSize: 24, margin: 0 }}>

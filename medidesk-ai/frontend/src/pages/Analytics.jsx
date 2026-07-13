@@ -6,7 +6,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
-import '../new-design.css';
+
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,34 +148,34 @@ const Analytics = ({ settings, currentUser }) => {
   };
 
   if (loading) return (
-    <div className="app-container">
+    <div className="app-shell">
+      <TopBar settings={settings} currentUser={currentUser} />
       <Sidebar activePage="analytics" />
       <div className="main-content page-transition">
-        <TopBar settings={settings} currentUser={currentUser} />
         <div className="loading"><div className="spinner" /></div>
       </div>
     </div>
   );
 
   if (error) return (
-    <div className="app-container">
+    <div className="app-shell">
+      <TopBar settings={settings} currentUser={currentUser} />
       <Sidebar activePage="analytics" />
       <div className="main-content page-transition">
-        <TopBar settings={settings} currentUser={currentUser} />
-        <div className="flex-col items-center justify-center p-20">
-          <h3>Error loading analytics</h3>
-          <p>{error}</p>
-          <button onClick={fetchAnalyticsData} className="rounded-sm cursor-pointer" style={{ padding: '10px 20px', background: TEAL, color: '#fff', border: 'none' }}>Retry</button>
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Error loading analytics</h3>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{error}</p>
+          <button onClick={fetchAnalyticsData} className="btn btn-primary">Retry</button>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
+      <TopBar settings={settings} currentUser={currentUser} />
       <Sidebar activePage="analytics" />
       <div className="main-content page-transition" style={{ overflowY: 'auto' }}>
-        <TopBar settings={settings} currentUser={currentUser} />
 
         <div className="analytics-page" style={{ paddingBottom: 40 }}>
 

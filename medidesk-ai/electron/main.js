@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, session, safeStorage, clipboard } = require('electron');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { startGoogleLogin } = require('./googleAuth');
 const { loadSession, clearSession, loadClinicSession, clearClinicSession } = require('./userStore');
 

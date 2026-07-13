@@ -16,7 +16,7 @@ import {
   deleteAppointment,
   updateAppointment,
 } from '../services/appointmentSyncService';
-import '../new-design.css';
+
 
 // Status colour map — shared with appointment cards
 export const STATUS_COLORS = {
@@ -43,45 +43,7 @@ const Appointments = ({ settings, currentUser }) => {
   const [stats, setStats]                       = useState({ thisWeek: 0, today: 0, scheduled: 0, urgent: 0 });
   const [deleteConfirm, setDeleteConfirm]       = useState(null); // appointment id to delete
 
-  useEffect(() => {
-    setAppointments([]);
-    setWeekAppointments([]);
-    reloadAll();
-  }, [selectedDate, viewMode, currentUser?.googleId]);
-
-  // Keyboard shortcut for new appointment
-  useEffect(() => {
-    const handleQuickAddAppt = () => setShowModal(true);
-    window.addEventListener('quick-add-appointment', handleQuickAddAppt);
-    return () => window.removeEventListener('quick-add-appointment', handleQuickAddAppt);
-  }, []);
-
-  // Replay appointment queue when network comes back
-  useEffect(() => {
-    const handleOnline = async () => {
-      const { replayApptQueue } = await import('../services/appointmentSyncService');
-      replayApptQueue().catch(() => {});
-    };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, []);
-
-  // Real-time appointment updates via WebSocket (SaaS mode)
-  useEffect(() => {
-    const unsubNew = onRealtimeEvent('appointment_new', () => reloadAll());
-    const unsubUpd = onRealtimeEvent('appointment_updated', () => reloadAll());
-    return () => { unsubNew(); unsubUpd(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, viewMode]);
-
   const dateStr = () => selectedDate.toISOString().split('T')[0];
-
-  const reloadAll = useCallback(() => {
-    if (viewMode === 'week')       loadWeekAppts();
-    else if (viewMode === 'month') loadMonthAppts();
-    else                           loadDayAppts();
-    loadStats();
-  }, [viewMode, loadDayAppts, loadWeekAppts, loadMonthAppts, loadStats]);
 
   const loadDayAppts = useCallback(async () => {
     setLoadingAppts(true);
@@ -149,6 +111,45 @@ const Appointments = ({ settings, currentUser }) => {
     return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
   };
 
+  const reloadAll = useCallback(() => {
+    if (viewMode === 'week')       loadWeekAppts();
+    else if (viewMode === 'month') loadMonthAppts();
+    else                           loadDayAppts();
+    loadStats();
+  }, [viewMode, loadDayAppts, loadWeekAppts, loadMonthAppts, loadStats]);
+
+  useEffect(() => {
+    setAppointments([]);
+    setWeekAppointments([]);
+    reloadAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, viewMode, currentUser?.googleId]);
+
+  // Keyboard shortcut for new appointment
+  useEffect(() => {
+    const handleQuickAddAppt = () => setShowModal(true);
+    window.addEventListener('quick-add-appointment', handleQuickAddAppt);
+    return () => window.removeEventListener('quick-add-appointment', handleQuickAddAppt);
+  }, []);
+
+  // Replay appointment queue when network comes back
+  useEffect(() => {
+    const handleOnline = async () => {
+      const { replayApptQueue } = await import('../services/appointmentSyncService');
+      replayApptQueue().catch(() => {});
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
+
+  // Real-time appointment updates via WebSocket (SaaS mode)
+  useEffect(() => {
+    const unsubNew = onRealtimeEvent('appointment_new', () => reloadAll());
+    const unsubUpd = onRealtimeEvent('appointment_updated', () => reloadAll());
+    return () => { unsubNew(); unsubUpd(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, viewMode]);
+
   const handleAppointmentSave = useCallback(() => {
     setShowModal(false);
     setEditingAppointment(null);
@@ -195,10 +196,10 @@ const Appointments = ({ settings, currentUser }) => {
   const statusStyle = (status) => STATUS_COLORS[status] || STATUS_COLORS.pending;
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
+      <TopBar settings={settings} currentUser={currentUser} />
       <Sidebar activePage="appointments" />
       <div className="main-content page-transition">
-        <TopBar settings={settings} currentUser={currentUser} />
         <div className="appointments-page">
 
           {/* ── Left column ── */}

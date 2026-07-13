@@ -11,8 +11,7 @@ import { isSecretary } from '../utils/roleUtils';
 import { fetchCloudPatients, replayQueue, loadSyncQueueItems, updateCloudPatient, deleteCloudPatient } from '../services/patientSyncService';
 import { loadApptQueueItems } from '../services/appointmentSyncService';
 import { useUX } from '../context/UXContext';
-import '../new-design.css';
-import '../modal.css';
+
 
 const Dashboard = ({ settings, currentUser }) => {
   const { userRole, clinicId } = getSession();
@@ -28,7 +27,6 @@ const Dashboard = ({ settings, currentUser }) => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [columns, setColumns] = useState([]);
-  const [language, setLanguage] = useState(settings?.language || 'en');
   const [fetchError, setFetchError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null); // patient ID to confirm deletion for
   const [cloudOffline, setCloudOffline] = useState(false);
@@ -80,6 +78,50 @@ const Dashboard = ({ settings, currentUser }) => {
       console.warn('[sync] could not load failed queue items', e);
     }
   };
+
+  const fetchPatients = useCallback(async () => {
+    try {
+      // Both roles: cloud is the single source of truth
+      const cloud = await fetchCloudPatients(page, 50, debouncedSearch);
+      if (cloud === null) {
+        setCloudOffline(true);
+        if (secretary && cachedCloudPatients.current.length === 0 && clinicId) {
+          const diskCache = await window.electronAPI?.loadPatientCache?.(clinicId) || [];
+          cachedCloudPatients.current = diskCache;
+        }
+        setPatients(cachedCloudPatients.current);
+      } else {
+        setCloudOffline(false);
+        if (page > 1) {
+          cachedCloudPatients.current = [...cachedCloudPatients.current, ...cloud];
+          setPatients(prev => [...prev, ...cloud]);
+        } else {
+          cachedCloudPatients.current = cloud;
+          setPatients(cloud);
+        }
+        if (clinicId) {
+          window.electronAPI?.savePatientCache?.({ clinicId, patients: cloud });
+        }
+      }
+      setFetchError('');
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      setFetchError('Failed to load patients. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, debouncedSearch, secretary, clinicId]);
+
+  const fetchColumns = useCallback(async () => {
+    // Custom columns are stored in cloud — skip for secretary (no column management)
+    if (secretary) return;
+    try {
+      const response = await cloudApi.get('/columns');
+      setColumns(response.data.columns || []);
+    } catch (error) {
+      // Silently skip if not available
+    }
+  }, [secretary]);
 
   useEffect(() => {
     // Reset all state when user changes — prevents stale data from previous login
@@ -137,50 +179,6 @@ const Dashboard = ({ settings, currentUser }) => {
       fetchPatients();
     }
   }, [fetchPatients, debouncedSearch, page]);
-
-  const fetchPatients = useCallback(async () => {
-    try {
-      // Both roles: cloud is the single source of truth
-      const cloud = await fetchCloudPatients(page, 50, debouncedSearch);
-      if (cloud === null) {
-        setCloudOffline(true);
-        if (secretary && cachedCloudPatients.current.length === 0 && clinicId) {
-          const diskCache = await window.electronAPI?.loadPatientCache?.(clinicId) || [];
-          cachedCloudPatients.current = diskCache;
-        }
-        setPatients(cachedCloudPatients.current);
-      } else {
-        setCloudOffline(false);
-        if (page > 1) {
-          cachedCloudPatients.current = [...cachedCloudPatients.current, ...cloud];
-          setPatients(prev => [...prev, ...cloud]);
-        } else {
-          cachedCloudPatients.current = cloud;
-          setPatients(cloud);
-        }
-        if (clinicId) {
-          window.electronAPI?.savePatientCache?.({ clinicId, patients: cloud });
-        }
-      }
-      setFetchError('');
-    } catch (error) {
-      console.error('Error fetching patients:', error);
-      setFetchError('Failed to load patients. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, debouncedSearch, secretary, clinicId]);
-
-  const fetchColumns = useCallback(async () => {
-    // Custom columns are stored in cloud — skip for secretary (no column management)
-    if (secretary) return;
-    try {
-      const response = await cloudApi.get('/columns');
-      setColumns(response.data.columns || []);
-    } catch (error) {
-      // Silently skip if not available
-    }
-  }, [secretary]);
 
   const handlePatientSelect = async (patient) => {
     // Cloud is the only source — use the patient data directly
@@ -306,15 +304,6 @@ const Dashboard = ({ settings, currentUser }) => {
     }
   }, [fetchColumns, fetchPatients, selectedPatient, handlePatientSelect]);
 
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang);
-    // Future: Add language change logic
-  };
-
-  const handleNotesClick = (patient) => {
-    // This will be handled by PatientDetail component
-  };
-
   // Listen for keyboard shortcut events
   useEffect(() => {
     const handleQuickAdd = () => {
@@ -336,29 +325,18 @@ const Dashboard = ({ settings, currentUser }) => {
   }, [secretary, cloudOffline]);
 
   return (
-    <div className="app-container">
-      {/* Floating Quick Action Button */}
-      {!cloudOffline && (
-        <button
-          onClick={() => { setShowPatientForm(true); setEditingPatient(null); }}
-          className="fab-add-btn"
-          title="Add Patient (Ctrl+N)"
-        >
-          +
-        </button>
-      )}
+    <div className="app-shell">
+      {/* Top Bar — spans full width in grid */}
+      <TopBar settings={settings} currentUser={currentUser} />
 
       {/* Sidebar */}
       <Sidebar activePage="patients" />
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div className="main-content page-transition">
-        {/* Top Bar */}
-        <TopBar settings={settings} currentUser={currentUser} onLanguageChange={handleLanguageChange} />
-
         {/* Secretary banner */}
         {secretary && (
-          <div className="banner-secretary">
+          <div className="banner banner-secretary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
@@ -369,21 +347,21 @@ const Dashboard = ({ settings, currentUser }) => {
           </div>
         )}
 
-        {/* Cloud offline warning — full width, high contrast */}
+        {/* Cloud offline warning */}
         {cloudOffline && (
-          <div className="banner-cloud-offline">
+          <div className="banner banner-cloud-offline">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             {secretary
-              ? '⚠ Offline — showing cached data. Adding patients is disabled until you reconnect.'
-              : '⚠ Cloud sync unavailable — showing local patients only. Edits will sync when reconnected.'}
+              ? 'Offline — showing cached data. Adding patients is disabled until you reconnect.'
+              : 'Cloud sync unavailable — showing local patients only. Edits will sync when reconnected.'}
           </div>
         )}
 
-        {/* Sync queue warning — shown when offline edits failed to replay */}
+        {/* Sync queue warning */}
         {syncWarning && !cloudOffline && (
-          <div className="banner-sync-warning">
+          <div className="banner banner-sync-warning">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -396,17 +374,12 @@ const Dashboard = ({ settings, currentUser }) => {
           <div className="sync-issues-panel">
             <div className="sync-issues-row">
               <div>
-                <strong>⚠️ Sync Issues Detected</strong>
+                <strong>Sync Issues Detected</strong>
                 <div style={{ marginTop: 4, color: '#7f1d1d' }}>
                   Some cloud updates could not be persisted. Please review or reload affected records.
                 </div>
               </div>
-              <button
-                onClick={() => clearSyncIssues()}
-                className="sync-issues-clear-btn"
-              >
-                Clear
-              </button>
+              <button onClick={() => clearSyncIssues()} className="sync-issues-clear-btn">Clear</button>
             </div>
             {syncIssues.slice(0, 3).map(issue => (
               <div key={issue.id} className="sync-issues-row">
@@ -415,27 +388,18 @@ const Dashboard = ({ settings, currentUser }) => {
                   <div style={{ fontSize: 12, color: '#7f1d1d' }}>{issue.timestamp ? new Date(issue.timestamp).toLocaleString() : ''}</div>
                 </div>
                 {issue.patientId && (
-                  <button
-                    onClick={() => handlePatientSelect({ id: issue.patientId })}
-                    className="sync-issues-btn"
-                  >
-                    Reload
-                  </button>
+                  <button onClick={() => handlePatientSelect({ id: issue.patientId })} className="sync-issues-btn">Reload</button>
                 )}
               </div>
             ))}
             {syncIssues.length > 3 && (
-              <div style={{ fontSize: 12, color: '#7f1d1d' }}>
-                +{syncIssues.length - 3} more issue(s)
-              </div>
+              <div style={{ fontSize: 12, color: '#7f1d1d' }}>+{syncIssues.length - 3} more issue(s)</div>
             )}
           </div>
         )}
 
         {/* Resizable Content Area */}
         <div ref={contentRef} className="resizable-layout">
-
-          {/* Left — Patient List */}
           <div style={{ width: `${leftWidth}%`, minWidth: '20%' }} className="layout-pane">
             <PatientList
               patients={patients}
@@ -454,11 +418,7 @@ const Dashboard = ({ settings, currentUser }) => {
               onLoadMore={() => { setPage(p => p + 1); setTimeout(() => fetchPatients(), 100); }}
             />
           </div>
-
-          {/* Drag divider */}
           <div className="resize-divider" onMouseDown={onDividerMouseDown} />
-
-          {/* Right — Patient Detail */}
           <div style={{ flex: 1, minWidth: '30%' }} className="layout-pane">
             <PatientDetail
               selectedPatient={selectedPatient}
@@ -466,9 +426,21 @@ const Dashboard = ({ settings, currentUser }) => {
               onPatientRefresh={handlePatientSelect}
             />
           </div>
-
         </div>
       </div>
+
+      {/* Floating Quick Action Button */}
+      {!cloudOffline && (
+        <button
+          onClick={() => { setShowPatientForm(true); setEditingPatient(null); }}
+          className="fab-add-btn"
+          title="Add Patient (Ctrl+N)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="22" height="22">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      )}
 
       {/* Patient Form Modal */}
       {showPatientForm && (
@@ -479,7 +451,6 @@ const Dashboard = ({ settings, currentUser }) => {
         />
       )}
 
-      {/* Delete confirmation modal — replaces window.confirm */}
       <ConfirmModal
         open={deleteConfirm !== null}
         title="Delete patient?"

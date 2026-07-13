@@ -101,6 +101,7 @@ class Appointment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     clinic = relationship("Clinic", back_populates="appointments")
+    patient = relationship("Patient", foreign_keys=[patient_id])  # For joinedload optimization
 
 
 class AuditLog(Base):

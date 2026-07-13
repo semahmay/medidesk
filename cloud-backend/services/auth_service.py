@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, g, jsonify
 
+
 load_dotenv()  # must run before os.getenv("JWT_SECRET") below
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -152,31 +153,22 @@ def verify_jwt(fn):
         # ── Revocation check ──────────────────────────────────────────────────
         jti = payload.get("jti")
         if jti:
-            _revocation_checked = False
             try:
                 from core.db import SessionLocal
                 from models import RevokedToken
                 db = SessionLocal()
                 try:
-                    # Check token-specific revocation
-                    revoked = db.query(RevokedToken).filter_by(jti=jti).first()
+                    # Single query: check both token-specific and user-level revocation
+                    revoked = db.query(RevokedToken).filter(
+                        RevokedToken.jti.in_([jti, f"user:{payload.get('sub')}"])
+                    ).first()
                     if revoked:
                         _log("revoked_token_used", user_id=payload.get("sub"))
                         return jsonify({"error": "Token has been revoked"}), 401
-                    # Check user-level revocation (all tokens for this user)
-                    user_revoked = db.query(RevokedToken).filter_by(
-                        jti=f"user:{payload.get('sub')}"
-                    ).first()
-                    if user_revoked:
-                        _log("revoked_user_token_used", user_id=payload.get("sub"))
-                        return jsonify({"error": "Token has been revoked"}), 401
-                    _revocation_checked = True
                 finally:
                     db.close()
             except Exception as _rev_err:
-                # Table missing or DB error — log it, then DENY the request.
-                # Fail-closed: if we cannot verify revocation status, reject the token.
-                # This prevents revocation bypass due to DB errors.
+                # Fail-closed: if we cannot verify revocation status, reject the request.
                 logger.error(
                     f"[AUTH] revocation_check_failed jti={jti} user={payload.get('sub')} "
                     f"error={_rev_err!r} — denying request"

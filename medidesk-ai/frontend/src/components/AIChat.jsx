@@ -79,58 +79,72 @@ const AIChat = ({ patient }) => {
   };
 
   return (
-    <div className="ai-assistant">
-      <div className="ai-assistant-header">
-        <div className="ai-assistant-label">AI assistant</div>
-        <button
-          className="clear-chat-btn"
-          onClick={() => { setMessages([]); if (storageKey) localStorage.removeItem(storageKey); }}
-        >
-          Clear chat
-        </button>
-      </div>
-
-      <div className="chat-messages" ref={chatContainerRef}>
-        <div className="quick-actions">
-          {QUICK_ACTIONS.map((action, index) => (
-            <button
-              key={index}
-              className="quick-action-btn"
-              onClick={() => handleSendMessage(action.prompt)}
-              disabled={loading}
-            >
-              {action.label}
-            </button>
-          ))}
+    <>
+      {/* Clear chat button — only when there are messages */}
+      {messages.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 6px' }}>
+          <button
+            onClick={() => {
+              setMessages([]);
+              if (storageKey) localStorage.removeItem(storageKey);
+            }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 500,
+              background: 'none', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
+              transition: 'all 0.13s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = 'var(--danger-600)'; e.currentTarget.style.borderColor = 'rgba(196,52,43,0.25)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+            title="Clear conversation"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <polyline points="3 6 5 6 21 6"/><path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Clear chat
+          </button>
         </div>
-
+      )}
+      <div className="ai-msgs" ref={chatContainerRef}>
         {messages.length === 0 ? (
-          <div className="chat-welcome">
-            <p>Ask me anything about this patient case</p>
+          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-secondary)', fontSize: 13 }}>
+            <p style={{ margin: '0 0 4px' }}>Ask me anything about this patient case</p>
+            <div className="ai-quick" style={{ justifyContent: 'center', padding: '12px 0 0' }}>
+              {QUICK_ACTIONS.map((action, index) => (
+                <button key={index} onClick={() => handleSendMessage(action.prompt)} disabled={loading}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
-          messages.map((message, index) => (
-            <div key={index} className={`message ${message.role === 'user' ? 'user-message' : 'ai-message'}`}>
-              <div className="message-content">
-                <span dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }} />
+          <>
+            <div className="ai-quick">
+              {QUICK_ACTIONS.map((action, index) => (
+                <button key={index} onClick={() => handleSendMessage(action.prompt)} disabled={loading}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+            {messages.map((message, index) => (
+              <div key={index} className={`msg ${message.role === 'user' ? 'msg-user' : 'msg-ai'}`}>
+                {message.role === 'assistant' && <div className="msg-ai-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M5 15h14M5 15a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2M5 15l-.5-4M19 15l.5-4"/></svg> AI</div>}
+                <div dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }} />
               </div>
-            </div>
-          ))
-        )}
-
-        {loading && (
-          <div className="message ai-message">
-            <div className="message-content">
-              <div className="typing-indicator"><span /><span /><span /></div>
-            </div>
-          </div>
+            ))}
+            {loading && (
+              <div className="msg msg-ai">
+                <div className="msg-ai-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M5 15h14M5 15a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2M5 15l-.5-4M19 15l.5-4"/></svg> AI</div>
+                <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></div>
+              </div>
+            )}
+          </>
         )}
       </div>
-
-      <div className="chat-input-area">
+      <div className="ai-input">
         <input
           type="text"
-          className="chat-input"
           placeholder="Ask about this patient..."
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
@@ -138,14 +152,14 @@ const AIChat = ({ patient }) => {
           disabled={loading}
         />
         <button
-          className="send-btn"
+          className="ai-send"
           onClick={() => handleSendMessage(inputMessage)}
           disabled={loading || !inputMessage.trim()}
         >
-          Send
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         </button>
       </div>
-    </div>
+    </>
   );
 };
 

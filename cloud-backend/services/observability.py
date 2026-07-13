@@ -166,13 +166,20 @@ def _report_to_sentry(exc: Exception) -> None:
 
 # ── Request metrics (stored in Redis) ─────────────────────────────────────────
 
+# Shared Redis connection - reuse across metric calls to avoid connection churn
+_metrics_redis = None
+
 def _get_redis():
+    global _metrics_redis
+    if _metrics_redis is not None:
+        return _metrics_redis
     redis_url = os.getenv("REDIS_URL")
     if not redis_url:
         return None
     try:
         import redis
-        return redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=1)
+        _metrics_redis = redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=1)
+        return _metrics_redis
     except Exception:
         return None
 

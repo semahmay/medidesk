@@ -1,12 +1,15 @@
 """
 routes/clinic.py — Clinic management + analytics endpoints.
+Performance optimized: module-level imports, pagination on analytics.
 """
 
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
-from core.db import get_db
+from core.db import get_db, session_scope
+from core.serializer import serialize
 from models import Clinic, User, Patient, Appointment, AuditLog
 from services.auth_service import verify_jwt, require_role, _log
 from services.audit_service import audit, Actions
@@ -62,7 +65,6 @@ def join_clinic():
 @require_role("doctor")
 @limiter.limit("60 per minute")
 def get_clinic_by_doctor(doctor_user_id):
-    from app import serialize
     if g.user_id != doctor_user_id:
         return jsonify({"error": "Forbidden", "code": "FORBIDDEN"}), 403
     db = get_db()
@@ -79,7 +81,6 @@ def get_clinic_by_doctor(doctor_user_id):
 @verify_jwt
 @limiter.limit("60 per minute")
 def get_clinic(clinic_id_param):
-    from app import serialize
     if g.clinic_id != clinic_id_param:
         return jsonify({"error": "Forbidden", "code": "FORBIDDEN"}), 403
     db = get_db()
@@ -136,7 +137,7 @@ def create_secretary():
 @require_role("doctor")
 @limiter.limit("60 per minute")
 def list_secretaries():
-    from app import serialize
+    """List secretaries in clinic. No pagination needed - typically < 10 secretaries."""
     db = get_db()
     try:
         users = db.query(User).filter_by(clinic_id=g.clinic_id, role="secretary").all()
@@ -170,14 +171,20 @@ def reset_secretary_password(secretary_id):
 @verify_jwt
 @limiter.limit("60 per minute")
 def get_my_clinic():
-    from app import serialize
+    """Get current user's clinic with doctor info.
+    Performance: Single query with joinedload instead of 2 separate queries."""
     db = get_db()
     try:
-        clinic = db.query(Clinic).filter_by(id=g.clinic_id).first()
+        clinic = (
+            db.query(Clinic)
+            .options(joinedload(Clinic.users))
+            .filter_by(id=g.clinic_id)
+            .first()
+        )
         if not clinic:
             return jsonify({"error": "Clinic not found", "code": "NOT_FOUND"}), 404
-        doctor = db.query(User).filter_by(clinic_id=g.clinic_id, role="doctor").first()
         result = serialize(clinic)
+        doctor = next((u for u in clinic.users if u.role == "doctor"), None)
         if doctor:
             result["doctor"] = {"id": doctor.id, "name": doctor.name, "email": doctor.email}
         return jsonify({"clinic": result})
@@ -382,16 +389,17 @@ def analytics_busiest_days():
 @bp.route("/analytics/recent-activity", methods=["GET"])
 @verify_jwt
 def analytics_recent_activity():
+    """Recent audit logs with pagination. Limited to 50 entries."""
     db = get_db()
     try:
+        limit = min(int(request.args.get("limit", 50)), 100)
         logs = (
             db.query(AuditLog)
             .filter(AuditLog.clinic_id == g.clinic_id)
             .order_by(AuditLog.timestamp.desc())
-            .limit(50)
+            .limit(limit)
             .all()
         )
-        from app import serialize
         return jsonify({"activity": [serialize(log) for log in logs]})
     finally:
         db.close()

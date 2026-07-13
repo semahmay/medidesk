@@ -1,15 +1,18 @@
 """
 routes/appointments.py — Appointment CRUD endpoints.
+Performance optimized: joinedload for N+1 prevention, pagination enforced.
 """
 
 from flask import Blueprint, request, jsonify, g
-from datetime import datetime, date as Date, time as Time
+from datetime import datetime, date as Date, time as Time, timedelta
+from sqlalchemy.orm import joinedload
 
 from core.db import get_db
 from models import Appointment, Patient
 from services.auth_service import verify_jwt, require_role
 from services.appointment_service import create_appointment, update_appointment, delete_appointment
 from core.extensions import limiter
+from core.serializer import serialize
 from validation import validation_error, get_json_body, require_fields, validate_string, validate_enum, validate_time_string
 
 bp = Blueprint("appointments", __name__, url_prefix="/api/appointments")
@@ -19,7 +22,10 @@ bp = Blueprint("appointments", __name__, url_prefix="/api/appointments")
 @verify_jwt
 @limiter.limit("120 per minute")
 def get_appointments():
-    from app import serialize
+    """
+    List appointments with pagination.
+    Performance: Uses joinedload to prevent N+1 queries when fetching patient data.
+    """
     db = get_db()
     try:
         today = datetime.utcnow().date()
@@ -33,30 +39,50 @@ def get_appointments():
         if not start_date:
             start_date = today.isoformat()
         if not end_date:
-            end_date = (today + __import__("datetime").timedelta(days=30)).isoformat()
+            end_date = (today + timedelta(days=30)).isoformat()
 
+        # Pagination parameters with hard limits
+        limit = min(int(request.args.get("limit", 100)), 500)
+        offset = max(int(request.args.get("offset", 0)), 0)
+
+        # OPTIMIZED: Use joinedload to fetch patient data in a single query
+        # Previously: N+1 queries (1 for appointments + N for patients)
+        # Now: 1 query total
         appts = (
             db.query(Appointment)
+            .options(joinedload(Appointment.patient))
             .filter(
                 Appointment.clinic_id == g.clinic_id,
                 Appointment.date.between(start_date, end_date),
             )
             .order_by(Appointment.date, Appointment.start_time)
+            .offset(offset)
+            .limit(limit)
             .all()
         )
+
+        # Get total count for pagination metadata
+        total = (
+            db.query(Appointment)
+            .filter(
+                Appointment.clinic_id == g.clinic_id,
+                Appointment.date.between(start_date, end_date),
+            )
+            .count()
+        )
+
         result = []
         for appt in appts:
             payload = serialize(appt)
-            if appt.patient_id is not None:
-                patient = db.query(Patient).filter(
-                    Patient.id == appt.patient_id,
-                    Patient.clinic_id == g.clinic_id,
-                    Patient.deleted_at == None,
-                ).first()
-                if patient:
-                    payload["patient"] = {"id": patient.id, "global_id": patient.global_id, "full_name": patient.full_name}
+            # Patient data already loaded via joinedload - no additional query
+            if appt.patient and appt.patient.deleted_at is None:
+                payload["patient"] = {
+                    "id": appt.patient.id,
+                    "global_id": appt.patient.global_id,
+                    "full_name": appt.patient.full_name
+                }
             result.append(payload)
-        return jsonify({"appointments": result})
+        return jsonify({"appointments": result, "total": total, "limit": limit, "offset": offset})
     finally:
         db.close()
 
@@ -65,21 +91,29 @@ def get_appointments():
 @verify_jwt
 @limiter.limit("120 per minute")
 def get_appointment(appointment_id):
-    from app import serialize
+    """
+    Get single appointment by ID.
+    Performance: Uses joinedload to fetch patient in same query.
+    """
     db = get_db()
     try:
-        appt = db.query(Appointment).filter_by(id=appointment_id, clinic_id=g.clinic_id).first()
+        # OPTIMIZED: Use joinedload to fetch patient data in a single query
+        appt = (
+            db.query(Appointment)
+            .options(joinedload(Appointment.patient))
+            .filter_by(id=appointment_id, clinic_id=g.clinic_id)
+            .first()
+        )
         if not appt:
             return jsonify({"error": "Appointment not found", "code": "NOT_FOUND"}), 404
         payload = serialize(appt)
-        if appt.patient_id is not None:
-            patient = db.query(Patient).filter(
-                Patient.id == appt.patient_id,
-                Patient.clinic_id == g.clinic_id,
-                Patient.deleted_at == None,
-            ).first()
-            if patient:
-                payload["patient"] = {"id": patient.id, "global_id": patient.global_id, "full_name": patient.full_name}
+        # Patient data already loaded via joinedload - no additional query
+        if appt.patient and appt.patient.deleted_at is None:
+            payload["patient"] = {
+                "id": appt.patient.id,
+                "global_id": appt.patient.global_id,
+                "full_name": appt.patient.full_name
+            }
         return jsonify({"appointment": payload})
     finally:
         db.close()

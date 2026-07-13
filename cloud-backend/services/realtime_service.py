@@ -59,16 +59,26 @@ def _get_redis():
     global _redis_client
     if _redis_client is None and _use_redis:
         import redis
-        _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        _redis_client = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
     return _redis_client
 
 
 def _next_seq(clinic_id: str) -> int:
-    """Atomically increment and return the next sequence number for a clinic."""
+    """Atomically increment and return the next sequence number for a clinic.
+    Keys auto-expire after EVENT_BUFFER_TTL to prevent stale key accumulation."""
     r = _get_redis()
     if not r:
         return int(time.time() * 1000)  # fallback: millisecond timestamp
-    return r.incr(f"seq:{clinic_id}")
+    key = f"seq:{clinic_id}"
+    seq = r.incr(key)
+    r.expire(key, EVENT_BUFFER_TTL)
+    return seq
 
 
 def _buffer_event(clinic_id: str, seq: int, event: str, data: dict) -> None:
@@ -105,11 +115,22 @@ def _get_missed_events(clinic_id: str, since_seq: int) -> list[dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+# Track active connections per clinic for monitoring (in-memory, worker-local)
+# This is for observability only - actual room membership is managed by SocketIO
+_active_connections = {}
+# Track sid -> clinic_id mapping for proper disconnect cleanup
+_sid_clinic_map = {}
+
 def emit_to_clinic(clinic_id: str, event: str, data: dict) -> None:
     """
     Emit an event to all connected clients in a clinic room.
     Assigns a sequence number and buffers for at-least-once delivery.
     Safe to call from any Flask route.
+    
+    Performance notes:
+    - Uses Redis pub/sub for multi-worker support
+    - Event buffer limited to EVENT_BUFFER_SIZE with TTL
+    - Broadcast only to specific clinic room (no global broadcasts)
     """
     seq = _next_seq(clinic_id)
     payload = {"seq": seq, **data}
@@ -126,6 +147,9 @@ def on_connect(auth):
     """
     Client connects with JWT in auth dict: { token: "Bearer ..." }
     Verifies token, joins clinic room, and replays missed events if last_seq provided.
+    
+    Performance: Each clinic gets its own room - broadcasts are isolated per clinic.
+    Tracks sid->clinic mapping for clean disconnect handling.
     """
     token_header = (auth or {}).get("token", "")
     token = token_header.removeprefix("Bearer ").strip()
@@ -142,6 +166,19 @@ def on_connect(auth):
     room = f"clinic_{clinic_id}"
     join_room(room)
 
+    # Track sid -> clinic_id for proper disconnect cleanup
+    from flask import request as _flask_req
+    sid = getattr(_flask_req, "sid", None)
+    if sid:
+        _sid_clinic_map[sid] = clinic_id
+
+    # Track connection count (worker-local, for monitoring only)
+    _active_connections[clinic_id] = _active_connections.get(clinic_id, 0) + 1
+    conn_count = _active_connections[clinic_id]
+
+    if conn_count > 50:
+        logger.warning(f"[realtime] HIGH CONNECTION COUNT: clinic={clinic_id} has {conn_count} active connections")
+
     # Replay missed events if client provides last_seq
     last_seq = int((auth or {}).get("last_seq", 0))
     if last_seq > 0:
@@ -155,13 +192,28 @@ def on_connect(auth):
         "room": room,
         "current_seq": _next_seq(clinic_id) - 1,  # last issued seq
     })
-    logger.info(f"[realtime] client joined clinic={clinic_id}")
+    logger.info(f"[realtime] client joined clinic={clinic_id} (total: {conn_count})")
 
 
 @socketio.on("disconnect")
 def on_disconnect():
-    # SocketIO handles room cleanup automatically on disconnect
-    pass
+    """
+    Clean up connection tracking on disconnect.
+    Uses sid -> clinic_id mapping to properly decrement per-clinic counters.
+    Prevents _active_connections memory leak from orphaned entries.
+    """
+    from flask import request as _flask_req
+    sid = getattr(_flask_req, "sid", None)
+    clinic_id = _sid_clinic_map.pop(sid, None) if sid else None
+
+    if clinic_id:
+        current = _active_connections.get(clinic_id, 0)
+        if current > 1:
+            _active_connections[clinic_id] = current - 1
+        else:
+            # Clean up - remove entry to prevent memory leak when count reaches 0
+            _active_connections.pop(clinic_id, None)
+            logger.debug(f"[realtime] clinic={clinic_id} has 0 active connections — cleaned up")
 
 
 @socketio.on("rejoin")

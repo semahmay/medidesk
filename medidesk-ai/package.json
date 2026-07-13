@@ -34,6 +34,7 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "electron-updater": "^6.1.7"
   },
   "build": {
@@ -58,11 +59,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",

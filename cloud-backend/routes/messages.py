@@ -1,11 +1,13 @@
 """
 routes/messages.py — Message endpoints.
+Performance optimized: pagination enforced, module-level imports.
 """
 
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 
 from core.db import get_db
+from core.serializer import serialize
 from models import Message, Clinic
 from services.auth_service import verify_jwt
 from services.audit_service import audit, Actions
@@ -21,11 +23,12 @@ bp = Blueprint("messages", __name__, url_prefix="/api/messages")
 @verify_jwt
 @limiter.limit("120 per minute")
 def get_messages():
-    from app import serialize
+    """List messages with pagination. Hard limit of 500 items per request."""
     db = get_db()
     try:
         limit = min(int(request.args.get("limit", 100)), 500)
         offset = max(int(request.args.get("offset", 0)), 0)
+        total = db.query(Message).filter_by(clinic_id=g.clinic_id).count()
         messages = (
             db.query(Message)
             .filter_by(clinic_id=g.clinic_id)
@@ -34,8 +37,12 @@ def get_messages():
             .offset(offset)
             .all()
         )
-        total = db.query(Message).filter_by(clinic_id=g.clinic_id).count()
-        return jsonify({"messages": [serialize(m) for m in messages], "total": total})
+        return jsonify({
+            "messages": [serialize(m) for m in messages],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        })
     finally:
         db.close()
 

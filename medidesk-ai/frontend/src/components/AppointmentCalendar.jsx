@@ -92,9 +92,7 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
     const startDay = firstDay === 0 ? 6 : firstDay - 1; // Convert Sunday (0) to Saturday (6)
     for (let i = 0; i < startDay; i++) {
       days.push(
-        <div key={`empty-${i}`} className="calendar-day empty">
-          <span className="day-number other-month"></span>
-        </div>
+        <div key={`empty-${i}`} className="cal-month-cell empty"></div>
       );
     }
 
@@ -108,14 +106,14 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
       days.push(
         <div 
           key={day} 
-          className={`calendar-day ${isCurrentDay ? 'today' : ''} ${isCurrentSelected ? 'selected' : ''}`}
+          className={`cal-month-cell ${isCurrentDay || isCurrentSelected ? '' : ''}`}
           onClick={() => handleDayClick(day)}
         >
-          <span className={`day-number ${isCurrentDay || isCurrentSelected ? '' : 'other-month'}`}>
+          <span className={`cal-month-day ${isCurrentDay ? 'today' : ''} ${isCurrentSelected ? 'selected' : ''}`}>
             {day}
           </span>
           {hasAppts && (
-            <span className={`appointment-dot ${hasUrgent ? 'urgent' : ''}`}></span>
+            <span className={`cal-month-dot ${hasUrgent ? 'urgent' : ''}`}></span>
           )}
         </div>
       );
@@ -127,8 +125,8 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
 
   if (!currentMonth) {
     return (
-      <div className="appointment-calendar">
-        <div className="calendar-header">
+      <div className="cal-month-card">
+        <div className="cal-month-header">
           <h3>Loading...</h3>
         </div>
       </div>
@@ -136,21 +134,21 @@ const AppointmentCalendar = ({ selectedDate, onDateSelect, appointments, onViewC
   }
 
   return (
-    <div className="appointment-calendar">
-      <div className="calendar-header">
-        <button className="calendar-nav-btn" onClick={handlePrevMonth}>
-          ←
+    <div className="cal-month-card">
+      <div className="cal-month-header">
+        <button className="btn btn-ghost" onClick={handlePrevMonth} aria-label="Previous month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <h3>{MONTH_NAMES[currentMonth.getMonth()]} {currentMonth.getFullYear()}</h3>
-        <button className="calendar-nav-btn" onClick={handleNextMonth}>
-          →
+        <button className="btn btn-ghost" onClick={handleNextMonth} aria-label="Next month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
       
-      <div className="calendar-grid">
+      <div className="cal-month-grid">
         {/* Day headers */}
         {DAY_NAMES.map(day => (
-          <div key={day} className="calendar-day-header">
+          <div key={day} className="cal-month-day-header">
             {day}
           </div>
         ))}
