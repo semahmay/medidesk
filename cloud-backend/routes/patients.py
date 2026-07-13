@@ -13,7 +13,7 @@ from models import Clinic, Patient, Appointment
 from services.auth_service import verify_jwt, require_role
 from services.patient_service import (
     create_patient, update_patient, delete_patient,
-    restore_patient, get_patient, get_patients,
+    restore_patient,
 )
 from services.realtime_service import emit_to_clinic
 from core.extensions import limiter
